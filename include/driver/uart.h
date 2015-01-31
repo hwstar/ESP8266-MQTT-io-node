@@ -95,7 +95,7 @@ typedef struct {
     int                      buff_uart_no;  //indicate which uart use tx/rx buffer
 } UartDevice;
 
-void uart_init(UartBautRate uart0_br, UartBautRate uart1_br);
+void uart0_init(UartBautRate uart0_br);
 void uart0_sendStr(const char *str);
 #endif
 

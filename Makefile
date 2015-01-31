@@ -9,19 +9,16 @@
 # relative to the project directory
 BUILD_BASE	= build
 FW_BASE		= firmware
-FLAVOR = release
-#FLAVOR = debug
 
 # Base directory for the compiler
-XTENSA_TOOLS_ROOT ?= c:/Espressif/xtensa-lx106-elf/bin
+XTENSA_TOOLS_ROOT ?= /opt/Espressif/crosstool-NG/builds/xtensa-lx106-elf/bin
 
 # base directory of the ESP8266 SDK package, absolute
-SDK_BASE	?= c:/Espressif/ESP8266_SDK
+SDK_BASE	?= /opt/Espressif/ESP8266_SDK
 
 #Esptool.py path and port
-PYTHON		?= C:\Python27\python.exe
-ESPTOOL		?= c:\Espressif\utils\esptool.py
-ESPPORT		?= COM3
+ESPTOOL		?= esptool.py
+ESPPORT		?= /dev/ttyUSB0
 
 # name for the target project
 TARGET		= app
@@ -34,20 +31,10 @@ EXTRA_INCDIR    = include $(SDK_BASE)/../include
 LIBS		= c gcc hal phy pp net80211 lwip wpa upgrade main ssl
 
 # compiler flags using during compilation of source files
-CFLAGS		= -Os -Wpointer-arith -Wundef -Werror -Wl,-EL -fno-inline-functions -nostdlib -mlongcalls -mtext-section-literals  -D__ets__ -DICACHE_FLASH
+CFLAGS		= -Os -g -O2 -Wpointer-arith -Wundef -Werror -Wl,-EL -fno-inline-functions -nostdlib -mlongcalls -mtext-section-literals  -D__ets__ -DICACHE_FLASH
 
 # linker flags used to generate the main object file
 LDFLAGS		= -nostdlib -Wl,--no-check-sections -u call_user_start -Wl,-static
-
-ifeq ($(FLAVOR),debug)
-    CFLAGS += -g -O0
-    LDFLAGS += -g -O0
-endif
-
-ifeq ($(FLAVOR),release)
-    CFLAGS += -g -O2
-    LDFLAGS += -g -O2
-endif
 
 # linker script used for the above linkier step
 LD_SCRIPT	= eagle.app.v6.ld
@@ -72,7 +59,7 @@ LD		:= $(XTENSA_TOOLS_ROOT)/xtensa-lx106-elf-gcc
 ####
 #### no user configurable options below here
 ####
-FW_TOOL		?= $(XTENSA_TOOLS_ROOT)/esptool
+FW_TOOL		?= /usr/bin/esptool
 SRC_DIR		:= $(MODULES)
 BUILD_DIR	:= $(addprefix $(BUILD_BASE)/,$(MODULES))
 
@@ -141,12 +128,10 @@ firmware:
 	$(Q) mkdir -p $@
 
 flash: firmware/0x00000.bin firmware/0x40000.bin
-	$(PYTHON) $(ESPTOOL) -p $(ESPPORT) write_flash 0x00000 firmware/0x00000.bin 0x3C000 $(BLANKER) 0x40000 firmware/0x40000.bin 
+	$(PYTHON) $(ESPTOOL) -p $(ESPPORT) write_flash 0x00000 firmware/0x00000.bin 0x3C000 $(BLANKER) 0x40000 firmware/0x40000.bin
 
 test: flash
 	screen $(ESPPORT) 115200
-
-rebuild: clean all
 
 clean:
 	$(Q) rm -f $(APP_AR)

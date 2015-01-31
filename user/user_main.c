@@ -38,6 +38,15 @@
 #include "user_interface.h"
 #include "mem.h"
 
+#define ON 1
+#define OFF 0
+
+#define RELAY_GPIO 2
+#define RELAY_GPIO_MUX PERIPHS_IO_MUX_GPIO2_U
+#define RELAY_GPIO_FUNC FUNC_GPIO2
+
+LOCAL int relay_state = OFF;
+
 MQTT_Client mqttClient;
 
 void wifiConnectCb(uint8_t status)
@@ -50,13 +59,7 @@ void mqttConnectedCb(uint32_t *args)
 {
 	MQTT_Client* client = (MQTT_Client*)args;
 	INFO("MQTT: Connected\r\n");
-	MQTT_Subscribe(client, "/mqtt/topic/0", 0);
-	MQTT_Subscribe(client, "/mqtt/topic/1", 1);
-	MQTT_Subscribe(client, "/mqtt/topic/2", 2);
-
-	MQTT_Publish(client, "/mqtt/topic/0", "hello0", 6, 0, 0);
-	MQTT_Publish(client, "/mqtt/topic/1", "hello1", 6, 1, 0);
-	MQTT_Publish(client, "/mqtt/topic/2", "hello2", 6, 2, 0);
+	MQTT_Subscribe(client, "/esp8266/relayset", 0);
 
 }
 
@@ -86,6 +89,22 @@ void mqttDataCb(uint32_t *args, const char* topic, uint32_t topic_len, const cha
 	dataBuf[data_len] = 0;
 
 	INFO("Receive topic: %s, data: %s \r\n", topicBuf, dataBuf);
+	
+	if (os_strcmp(topicBuf,"/esp8266/relayset") == 0){
+		if((os_strcmp(dataBuf, "on") == 0) || (os_strcmp(dataBuf, "ON") == 0)){
+			GPIO_OUTPUT_SET(RELAY_GPIO, 1);
+			relay_state = ON;
+			INFO("MQTT: Relay on\r\n");
+
+		}
+		else if((os_strcmp(dataBuf, "off") == 0) || (os_strcmp(dataBuf, "OFF") == 0)){
+			GPIO_OUTPUT_SET(RELAY_GPIO, 0);
+			relay_state = OFF;
+			INFO("MQTT: Relay off\r\n");
+			
+		}
+	}
+				
 	os_free(topicBuf);
 	os_free(dataBuf);
 }
@@ -93,16 +112,24 @@ void mqttDataCb(uint32_t *args, const char* topic, uint32_t topic_len, const cha
 
 void user_init(void)
 {
-	uart_init(BIT_RATE_115200, BIT_RATE_115200);
+	gpio_init();
+	
+			
+	// Initialize relay GPIO
+	PIN_FUNC_SELECT(RELAY_GPIO_MUX, RELAY_GPIO_FUNC);
+	GPIO_OUTPUT_SET(RELAY_GPIO, 0); // Relay off initially
+	
+	// Uart init
+	uart0_init(BIT_RATE_115200);
+
 	os_delay_us(1000000);
 
 	CFG_Load();
+	
 
 	MQTT_InitConnection(&mqttClient, sysCfg.mqtt_host, sysCfg.mqtt_port, sysCfg.security);
-	//MQTT_InitConnection(&mqttClient, "192.168.11.122", 1880, 0);
 
 	MQTT_InitClient(&mqttClient, sysCfg.device_id, sysCfg.mqtt_user, sysCfg.mqtt_pass, sysCfg.mqtt_keepalive, 1);
-	//MQTT_InitClient(&mqttClient, "client_id", "user", "pass", 120, 1);
 
 	MQTT_InitLWT(&mqttClient, "/lwt", "offline", 0, 0);
 	MQTT_OnConnected(&mqttClient, mqttConnectedCb);
