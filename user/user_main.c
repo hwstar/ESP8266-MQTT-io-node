@@ -27,6 +27,7 @@
 * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 * POSSIBILITY OF SUCH DAMAGE.
 */
+
 #include "ets_sys.h"
 #include "driver/uart.h"
 #include "osapi.h"
@@ -45,6 +46,53 @@
 #define RELAY_GPIO_MUX PERIPHS_IO_MUX_GPIO2_U
 #define RELAY_GPIO_FUNC FUNC_GPIO2
 
+#define MAX_INFO_ELEMENTS 16
+#define INFO_BLOCK_MAGIC 0x3F2A6C17
+#define INFO_BLOCK_SIG "ESP8266HWSTARSR"
+#define CONFIG_FLD_REQD 0x01
+
+struct config_info_element_tag{
+	uint8_t flags;
+	uint8_t key[15];
+	uint8_t value[80];
+}  __attribute__((__packed__));
+
+typedef struct config_info_element_tag config_info_element;
+
+struct config_info_block_tag{
+	uint8_t signature[16];
+	uint32_t magic;
+	uint8_t numelements;
+	uint8_t recordLength;
+	uint8_t pad[10];
+	config_info_element e[MAX_INFO_ELEMENTS];
+}  __attribute__((__packed__));
+
+typedef struct config_info_block_tag config_info_block;
+
+enum {WIFISSID=0, WIFIPASS, MQTTHOST, MQTTPORT, MQTTSECUR, MQTTDEVID, MQTTCLNT, MQTTPASS, MQTTKPALIV,MQTTTOPIC};
+
+
+/* Configuration block */
+
+LOCAL config_info_block configInfoBlock = {
+	.signature = INFO_BLOCK_SIG,
+	.magic = INFO_BLOCK_MAGIC,
+	.numelements = MAX_INFO_ELEMENTS,
+	.recordLength = sizeof(config_info_element),
+	.e[WIFISSID] = {.flags = CONFIG_FLD_REQD, .key = "WIFISSID", .value="tbd"},
+	.e[WIFIPASS] = {.flags = CONFIG_FLD_REQD, .key = "WIFIPASS", .value="tbd"},
+	.e[MQTTHOST] = {.flags = CONFIG_FLD_REQD, .key = "MQTTHOST", .value="tbd"},
+	.e[MQTTPORT] = {.key = "MQTTPORT", .value="1880"},
+	.e[MQTTSECUR] = {.key = "MQTTSECUR",.value="0"},
+	.e[MQTTDEVID] = {.key = "MQTTDEVID", .value="DEVID"},
+	.e[MQTTCLNT] = {.key = "MQTTCLNT", .value="MYUSER"},
+	.e[MQTTPASS] = {.key = "MQTTPASS", .value="MYPASS"},
+	.e[MQTTKPALIV] = {.key = "MQTTKPALIV", .value="120"},
+	.e[MQTTTOPIC] = {.flags = CONFIG_FLD_REQD, .key = "MQTTTOPIC", .value = "tbd"}
+};
+	
+
 LOCAL int relay_state = OFF;
 
 MQTT_Client mqttClient;
@@ -59,7 +107,7 @@ void mqttConnectedCb(uint32_t *args)
 {
 	MQTT_Client* client = (MQTT_Client*)args;
 	INFO("MQTT: Connected\r\n");
-	MQTT_Subscribe(client, "/esp8266/relayset", 0);
+	MQTT_Subscribe(client, configInfoBlock.e[MQTTTOPIC].value, 0);
 
 }
 
@@ -90,7 +138,7 @@ void mqttDataCb(uint32_t *args, const char* topic, uint32_t topic_len, const cha
 
 	INFO("Receive topic: %s, data: %s \r\n", topicBuf, dataBuf);
 	
-	if (os_strcmp(topicBuf,"/esp8266/relayset") == 0){
+	if (os_strcmp(topicBuf, configInfoBlock.e[MQTTTOPIC].value) == 0){
 		if((os_strcmp(dataBuf, "on") == 0) || (os_strcmp(dataBuf, "ON") == 0)){
 			GPIO_OUTPUT_SET(RELAY_GPIO, 1);
 			relay_state = ON;
@@ -113,6 +161,7 @@ void mqttDataCb(uint32_t *args, const char* topic, uint32_t topic_len, const cha
 void user_init(void)
 {
 	gpio_init();
+
 	
 			
 	// Initialize relay GPIO
@@ -124,12 +173,18 @@ void user_init(void)
 
 	os_delay_us(1000000);
 
-	CFG_Load();
 	
+	/* Initialize MQTT connection */
+	
+	uint8_t *host = configInfoBlock.e[MQTTHOST].value;
+	uint32_t port = (uint32_t) atoi(configInfoBlock.e[MQTTPORT].value);
+	
+	MQTT_InitConnection(&mqttClient, host, port,
+	(uint8_t) atoi(configInfoBlock.e[MQTTSECUR].value));
 
-	MQTT_InitConnection(&mqttClient, sysCfg.mqtt_host, sysCfg.mqtt_port, sysCfg.security);
-
-	MQTT_InitClient(&mqttClient, sysCfg.device_id, sysCfg.mqtt_user, sysCfg.mqtt_pass, sysCfg.mqtt_keepalive, 1);
+	MQTT_InitClient(&mqttClient, configInfoBlock.e[MQTTDEVID].value, 
+	configInfoBlock.e[MQTTCLNT].value, configInfoBlock.e[MQTTPASS].value,
+	atoi(configInfoBlock.e[MQTTKPALIV].value), 1);
 
 	MQTT_InitLWT(&mqttClient, "/lwt", "offline", 0, 0);
 	MQTT_OnConnected(&mqttClient, mqttConnectedCb);
@@ -137,7 +192,14 @@ void user_init(void)
 	MQTT_OnPublished(&mqttClient, mqttPublishedCb);
 	MQTT_OnData(&mqttClient, mqttDataCb);
 
-	WIFI_Connect(sysCfg.sta_ssid, sysCfg.sta_pwd, wifiConnectCb);
+
+	/* Attempt WIFI connection */
+	
+	uint8_t *ssid = configInfoBlock.e[WIFISSID].value;
+	uint8_t *wifipass = configInfoBlock.e[WIFIPASS].value;
+	
+	INFO("Attempting connection with: %s\r\n", ssid);
+	WIFI_Connect(ssid, wifipass, wifiConnectCb);
 
 	INFO("\r\nSystem started ...\r\n");
 }

@@ -18,6 +18,7 @@ SDK_BASE	?= /opt/Espressif/ESP8266_SDK
 
 #Esptool.py path and port
 ESPTOOL		?= esptool.py
+ESPCFGPATCHER ?= espcfgpatcher.py
 ESPPORT		?= /dev/ttyUSB0
 
 # name for the target project
@@ -126,6 +127,11 @@ $(BUILD_DIR):
 
 firmware:
 	$(Q) mkdir -p $@
+	
+cfgflash: firmware/0x00000.bin firmware/0x40000.bin my.cfg
+	$(PYTHON) $(ESPCFGPATCHER) patch firmware/0x00000.bin my.cfg firmware/0x00000-patched.bin
+	$(PYTHON) $(ESPTOOL) -p $(ESPPORT) write_flash 0x00000 firmware/0x00000-patched.bin 0x3C000 $(BLANKER) 0x40000 firmware/0x40000.bin
+
 
 flash: firmware/0x00000.bin firmware/0x40000.bin
 	$(PYTHON) $(ESPTOOL) -p $(ESPPORT) write_flash 0x00000 firmware/0x00000.bin 0x3C000 $(BLANKER) 0x40000 firmware/0x40000.bin
