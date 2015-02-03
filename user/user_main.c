@@ -175,7 +175,7 @@ int updateButtonState(int s)
 {
 	char *t = configInfoBlock.e[MQTTSTOPIC].value;
 	char *state = s ? "RELEASED" : "DEPRESSED";
-	char result[16];
+	char result[25];
 	os_strcpy(result,"BUTTONSTATE:");
 	os_strcat(result, state);
 	if('/' == *t){
