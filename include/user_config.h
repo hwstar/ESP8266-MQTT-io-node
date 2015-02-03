@@ -7,7 +7,7 @@
 
 /*DEFAULT CONFIGURATIONS*/
 
-#define MQTT_HOST			"192.168.17.201" //or "mqtt.yourdomain.com"
+#define MQTT_HOST			"127.0.0.1" //or "mqtt.yourdomain.com"
 #define MQTT_PORT			1880
 #define MQTT_BUF_SIZE		1024
 #define MQTT_KEEPALIVE		120	 /*second*/
@@ -16,8 +16,8 @@
 #define MQTT_USER			"DVES_USER"
 #define MQTT_PASS			"DVES_PASS"
 
-#define STA_SSID "qrvc-ap-02"
-#define STA_PASS "deadbeef1350face"
+#define STA_SSID "nunya"
+#define STA_PASS "itsasecret"
 #define STA_TYPE AUTH_WPA2_PSK
 
 #define MQTT_RECONNECT_TIMEOUT 	5	/*second*/
