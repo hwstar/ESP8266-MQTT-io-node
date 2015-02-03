@@ -1,6 +1,6 @@
-**esp_8266_io_node**
+i**esp_8266_io_node**
 ==========
-This is am implementation of a MQTT Relay Node using a port from: [MQTT client library for Contiki](https://github.com/esar/contiki-mqtt) (thanks)
+This is an implementation of a MQTT Relay Node using a port from: [MQTT client library for Contiki](https://github.com/esar/contiki-mqtt) (thanks)
 
 **Features:**
 
