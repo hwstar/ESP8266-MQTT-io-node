@@ -53,9 +53,11 @@
 #define ON 1
 #define OFF 0
 
-#define RELAY_GPIO 2
-#define RELAY_GPIO_MUX PERIPHS_IO_MUX_GPIO2_U
-#define RELAY_GPIO_FUNC FUNC_GPIO2
+#define RELAY_GPIO 12
+#define RELAY_GPIO_MUX PERIPHS_IO_MUX_MTDI_U
+#define RELAY_GPIO_FUNC FUNC_GPIO12
+#define RELAY_ON 0
+#define RELAY_OFF 1
 
 #define BUTTON_GPIO 0
 #define BUTTON_GPIO_MUX PERIPHS_IO_MUX_GPIO0_U
@@ -119,7 +121,6 @@ LOCAL os_timer_t pulse_timer, button_timer;
 
 MQTT_Client mqttClient;
 
-
 /*
  * Crude case insensitive string matching function
  */
@@ -127,7 +128,7 @@ MQTT_Client mqttClient;
 int userStrnMatchi(const char *s1, const char *s2, int len)
 {
 	int i;
-	for(i = 0; *s1 && *s2 && i < len; i++){
+	for(i = 0; *s1 && *s2 && i < len; i++, s1++, s2++){
 		if(tolower(*s1) != tolower(*s2))
 			break;
 	}
@@ -137,24 +138,39 @@ int userStrnMatchi(const char *s1, const char *s2, int len)
 		return 1; /* No match */	
 }
 
+
 /*
  * Send relay state update message
  */
  
-int updateRelayState(int s)
+void updateRelayState(int s)
 {
 	char *t = configInfoBlock.e[MQTTSTOPIC].value;
 	char *state = s ? "ON" : "OFF";
 	char result[16];
 	os_strcpy(result,"RELAYSTATE:");
 	os_strcat(result, state);
+	INFO("MQTT: New Relay State: %s\r\n", state);
 	if('/' == *t){
-		INFO("MQTT: New Relay State: %s\r\n", state);
 		MQTT_Publish(&mqttClient, t, result, os_strlen(result), 0, 0);
 	}
 	else
 		INFO("MQTT: State topic not set!\r\n");
 }
+
+
+/*
+ * Set new relay state
+ */
+ 
+void relaySet(bool new_state)
+{
+	relay_state = new_state;
+	GPIO_OUTPUT_SET(RELAY_GPIO, ((relay_state) ? RELAY_ON : RELAY_OFF));
+	updateRelayState(relay_state);
+}
+	
+
 
 /*
  * Toggle the relay output
@@ -162,24 +178,25 @@ int updateRelayState(int s)
 
 void relayToggle(void)
 {
-	relay_state = (relay_state) ? 0 : 1;
-	GPIO_OUTPUT_SET(RELAY_GPIO, relay_state);
-	updateRelayState(relay_state);
+	bool new_relay_state = (relay_state) ? OFF : ON;
+	relaySet(new_relay_state);
 }
 
 /*
  * Update the button state
  */
 
-int updateButtonState(int s)
+void updateButtonState(int s)
 {
+
+	
 	char *t = configInfoBlock.e[MQTTSTOPIC].value;
 	char *state = s ? "RELEASED" : "DEPRESSED";
 	char result[25];
 	os_strcpy(result,"BUTTONSTATE:");
 	os_strcat(result, state);
+	INFO("MQTT: New Button State: %s\r\n", state);
 	if('/' == *t){
-		INFO("MQTT: New Button State: %s\r\n", state);
 		MQTT_Publish(&mqttClient, t, result, os_strlen(result), 0, 0);
 	}
 	else
@@ -207,7 +224,7 @@ void mqttConnectedCb(uint32_t *args)
 	MQTT_Client* client = (MQTT_Client*)args;
 	INFO("MQTT: Connected\r\n");
 	MQTT_Subscribe(client, configInfoBlock.e[MQTTTOPIC].value, 0);
-	updateRelayState(relay_state);
+	updateRelayState(relay_state); // Indicate relay state 
 
 }
 
@@ -253,30 +270,18 @@ void mqttDataCb(uint32_t *args, const char* topic, uint32_t topic_len, const cha
 	
 	if (os_strcmp(topicBuf, configInfoBlock.e[MQTTTOPIC].value) == 0){
 		if(!userStrnMatchi(dataBuf, "on", 2)){
-			GPIO_OUTPUT_SET(RELAY_GPIO, 1);
-			INFO("MQTT: Relay ON\r\n");
-			relay_state = ON;
-			updateRelayState(relay_state);
-	
-
+			relaySet(ON);
 		}
 		else if(!userStrnMatchi(dataBuf, "off", 3)){
-			GPIO_OUTPUT_SET(RELAY_GPIO, 0);
-			INFO("MQTT: Relay OFF\r\n");
-			relay_state = OFF;
-			updateRelayState(relay_state);
+			relaySet(OFF);
 		}
 		else if(!userStrnMatchi(dataBuf, "toggle", 3)){
-			INFO("MQTT: Relay toggle: %s\r\n", (relay_state) ? "ON" : "OFF");
 			relayToggle();
 		}
 		else if(!userStrnMatchi(dataBuf, "pulse:", 6)){
 			int pulse_duration = atoi(dataBuf+6);
 			if(pulse_duration){
-				GPIO_OUTPUT_SET(RELAY_GPIO, 1);
-				INFO("MQTT: Relay pulse\r\n");
-				relay_state = ON;
-				updateRelayState(relay_state);
+				relaySet(ON);
 				os_timer_arm(&pulse_timer, pulse_duration, 0);
 			}			
 		}
@@ -295,9 +300,7 @@ void mqttDataCb(uint32_t *args, const char* topic, uint32_t topic_len, const cha
  
 void pulseTmerExpireCb(void *arg)
 {
-		GPIO_OUTPUT_SET(RELAY_GPIO, 0);
-		relay_state = OFF;
-		updateRelayState(relay_state);
+		relaySet(OFF);
 }
 
 
@@ -308,6 +311,7 @@ void pulseTmerExpireCb(void *arg)
 void buttonTimerCb(void *arg)
 {
 	int newstate =  GPIO_INPUT_GET(BUTTON_GPIO);
+	
 	if(newstate != button_state){
 		if(newstate){
 			char result[32];
@@ -335,8 +339,9 @@ void user_init(void)
 		
 	// Initialize relay GPIO as an output
 	PIN_FUNC_SELECT(RELAY_GPIO_MUX, RELAY_GPIO_FUNC);
-	GPIO_OUTPUT_SET(RELAY_GPIO, 0); // Relay off initially
-
+	GPIO_OUTPUT_SET(RELAY_GPIO, RELAY_OFF); // Relay off initially
+	
+	
 	// Uart init
 	uart0_init(BIT_RATE_115200);
 
