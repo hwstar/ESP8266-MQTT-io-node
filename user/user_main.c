@@ -275,7 +275,7 @@ void mqttDataCb(uint32_t *args, const char* topic, uint32_t topic_len, const cha
 		else if(!userStrnMatchi(dataBuf, "off", 3)){
 			relaySet(OFF);
 		}
-		else if(!userStrnMatchi(dataBuf, "toggle", 3)){
+		else if(!userStrnMatchi(dataBuf, "toggle", 6)){
 			relayToggle();
 		}
 		else if(!userStrnMatchi(dataBuf, "pulse:", 6)){
