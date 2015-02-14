@@ -50,6 +50,9 @@
 #include "user_interface.h"
 #include "mem.h"
 
+#include "util.h"
+#include "kvstore.h"
+
 #define ON 1
 #define OFF 0
 
@@ -86,9 +89,24 @@ struct config_info_block_tag{
 	config_info_element e[MAX_INFO_ELEMENTS];
 }  __attribute__((__packed__));
 
+
+typedef union {
+	char str[16];
+	unsigned u;
+	int i;
+} pu;
+
+typedef struct {
+	const char *command;
+	uint8_t type;
+	pu p;
+} command_element;
+
+
 typedef struct config_info_block_tag config_info_block;
 
-enum {WIFISSID=0, WIFIPASS, MQTTHOST, MQTTPORT, MQTTSECUR, MQTTDEVID, MQTTCLNT, MQTTPASS, MQTTKPALIV, MQTTTOPIC, MQTTSTOPIC, MQTTBTLOCAL};
+enum {WIFISSID=0, WIFIPASS, MQTTHOST, MQTTPORT, MQTTSECUR, MQTTDEVID, MQTTCLNT, MQTTPASS, MQTTKPALIV, MQTTRTOPIC, MQTTBTLOCAL};
+enum {CP_NONE= 0, CP_INT, CP_BOOL};
 
  
 /* Configuration block */
@@ -107,55 +125,47 @@ LOCAL config_info_block configInfoBlock = {
 	.e[MQTTCLNT] = {.key = "MQTTCLNT", .value="your_mqtt_client_name_here"}, // Only relevant if MQTTSECUR is other than 0
 	.e[MQTTPASS] = {.key = "MQTTPASS", .value="its_a_secret"},// Only relevant if MQTTSECUR is other than 0
 	.e[MQTTKPALIV] = {.key = "MQTTKPALIV", .value="120"}, // Keepalive interval
-	.e[MQTTTOPIC] = {.flags = CONFIG_FLD_REQD, .key = "MQTTTOPIC", .value = "/your/topic/here"},
-	.e[MQTTSTOPIC] = {.key = "MQTTSTOPIC", .value = "tbd"}, // Optional topic to send state info to
+	.e[MQTTRTOPIC] = {.flags = CONFIG_FLD_REQD, .key = "MQTTRTOPIC", .value = "/home/lab/relay"}, // Root topic
 	.e[MQTTBTLOCAL] = {.key = "MQTTBTLOCAL", .value = "1"} // Optional local toggle control using GPIO0
 };
+
+/* Command elements */
+ 
+enum {CMD_OFF = 0, CMD_ON, CMD_TOGGLE, CMD_PULSE};
+
+LOCAL command_element commandElements[5] = {
+	{.command = "OFF", .type = CP_NONE},
+	{.command = "ON", .type = CP_NONE},
+	{.command = "TOGGLE", .type = CP_NONE},
+	{.command = "PULSE", .type = CP_INT},
+	{.command = ""}
+};
 	
+
+LOCAL const char *infoString = "root:%s;ip4:%d.%d.%d.%d;schema:hwstar.relaynode";	
 
 LOCAL int relay_state = OFF;
 LOCAL int button_state = 1;
 LOCAL int localControl = 1;
-
+LOCAL char *commandTopic, *statusTopic;
+LOCAL flash_handle_s *configHandle;
 LOCAL os_timer_t pulse_timer, button_timer;
 
 MQTT_Client mqttClient;
 
 /*
- * Crude case insensitive string matching function
- */
- 
-int userStrnMatchi(const char *s1, const char *s2, int len)
-{
-	int i;
-	for(i = 0; *s1 && *s2 && i < len; i++, s1++, s2++){
-		if(tolower(*s1) != tolower(*s2))
-			break;
-	}
-	if(i == len)
-		return 0; /* Match by length */
-	else
-		return 1; /* No match */	
-}
-
-
-/*
  * Send relay state update message
  */
  
-void updateRelayState(int s)
+LOCAL void ICACHE_FLASH_ATTR updateRelayState(int s)
 {
-	char *t = configInfoBlock.e[MQTTSTOPIC].value;
 	char *state = s ? "ON" : "OFF";
 	char result[16];
 	os_strcpy(result,"RELAYSTATE:");
 	os_strcat(result, state);
 	INFO("MQTT: New Relay State: %s\r\n", state);
-	if('/' == *t){
-		MQTT_Publish(&mqttClient, t, result, os_strlen(result), 0, 0);
-	}
-	else
-		INFO("MQTT: State topic not set!\r\n");
+	MQTT_Publish(&mqttClient, statusTopic, result, os_strlen(result), 0, 0);
+
 }
 
 
@@ -163,7 +173,7 @@ void updateRelayState(int s)
  * Set new relay state
  */
  
-void relaySet(bool new_state)
+LOCAL void ICACHE_FLASH_ATTR relaySet(bool new_state)
 {
 	relay_state = new_state;
 	GPIO_OUTPUT_SET(RELAY_GPIO, ((relay_state) ? RELAY_ON : RELAY_OFF));
@@ -176,7 +186,7 @@ void relaySet(bool new_state)
  * Toggle the relay output
  */
 
-void relayToggle(void)
+LOCAL void ICACHE_FLASH_ATTR relayToggle(void)
 {
 	bool new_relay_state = (relay_state) ? OFF : ON;
 	relaySet(new_relay_state);
@@ -186,21 +196,17 @@ void relayToggle(void)
  * Update the button state
  */
 
-void updateButtonState(int s)
+LOCAL void ICACHE_FLASH_ATTR updateButtonState(int s)
 {
 
 	
-	char *t = configInfoBlock.e[MQTTSTOPIC].value;
 	char *state = s ? "RELEASED" : "DEPRESSED";
 	char result[25];
 	os_strcpy(result,"BUTTONSTATE:");
 	os_strcat(result, state);
 	INFO("MQTT: New Button State: %s\r\n", state);
-	if('/' == *t){
-		MQTT_Publish(&mqttClient, t, result, os_strlen(result), 0, 0);
-	}
-	else
-		INFO("MQTT: State topic not set!\r\n");
+	MQTT_Publish(&mqttClient, statusTopic, result, os_strlen(result), 0, 0);
+	
 }
 
 /*
@@ -208,7 +214,7 @@ void updateButtonState(int s)
  */
  
 
-void wifiConnectCb(uint8_t status)
+LOCAL void ICACHE_FLASH_ATTR wifiConnectCb(uint8_t status)
 {
 	if(status == STATION_GOT_IP){
 		MQTT_Connect(&mqttClient);
@@ -219,13 +225,34 @@ void wifiConnectCb(uint8_t status)
  * MQTT Connect call back
  */
  
-void mqttConnectedCb(uint32_t *args)
+LOCAL void ICACHE_FLASH_ATTR mqttConnectedCb(uint32_t *args)
 {
+	char *buf = util_zalloc(os_strlen(configInfoBlock.e[MQTTRTOPIC].value) + os_strlen(infoString) + 1);
+	struct ip_info ipConfig;
 	MQTT_Client* client = (MQTT_Client*)args;
+	
 	INFO("MQTT: Connected\r\n");
-	MQTT_Subscribe(client, configInfoBlock.e[MQTTTOPIC].value, 0);
-	updateRelayState(relay_state); // Indicate relay state 
+	
+	// Publish who we are and where we live
+	wifi_get_ip_info(STATION_IF, &ipConfig);
+	
+	os_sprintf(buf, infoString,
+			configInfoBlock.e[MQTTRTOPIC].value,
+			*((uint8_t *) &ipConfig.ip.addr),
+			*((uint8_t *) &ipConfig.ip.addr + 1),
+			*((uint8_t *) &ipConfig.ip.addr + 2),
+			*((uint8_t *) &ipConfig.ip.addr + 3));
 
+	INFO("MQTT Node info: %s\r\n", buf);
+
+	MQTT_Publish(client, "/node/info", buf, os_strlen(buf), 0, 0);
+	
+	// Subscribe to command topic
+	MQTT_Subscribe(client, commandTopic, 0);
+	// Publish relay state
+	updateRelayState(relay_state); 
+	// Free the buffer
+	util_free(buf);
 }
 
 /*
@@ -233,7 +260,7 @@ void mqttConnectedCb(uint32_t *args)
  */
  
 
-void mqttDisconnectedCb(uint32_t *args)
+LOCAL void ICACHE_FLASH_ATTR mqttDisconnectedCb(uint32_t *args)
 {
 	MQTT_Client* client = (MQTT_Client*)args;
 	INFO("MQTT: Disconnected\r\n");
@@ -243,7 +270,7 @@ void mqttDisconnectedCb(uint32_t *args)
  * MQTT published call back
  */
 
-void mqttPublishedCb(uint32_t *args)
+LOCAL void ICACHE_FLASH_ATTR mqttPublishedCb(uint32_t *args)
 {
 	MQTT_Client* client = (MQTT_Client*)args;
 	INFO("MQTT: Published\r\n");
@@ -253,52 +280,81 @@ void mqttPublishedCb(uint32_t *args)
  * MQTT Data call back
  */
 
-void mqttDataCb(uint32_t *args, const char* topic, uint32_t topic_len, const char *data, uint32_t data_len)
+LOCAL void ICACHE_FLASH_ATTR mqttDataCb(uint32_t *args, const char* topic, uint32_t topic_len, const char *data, uint32_t data_len)
 {
-	char *topicBuf = (char*)os_zalloc(topic_len+1),
-			*dataBuf = (char*)os_zalloc(data_len+1);
+	char *topicBuf, *dataBuf;
+	uint8_t i;
 
 	MQTT_Client* client = (MQTT_Client*)args;
 
-	os_memcpy(topicBuf, topic, topic_len);
-	topicBuf[topic_len] = 0;
-
-	os_memcpy(dataBuf, data, data_len);
-	dataBuf[data_len] = 0;
-
+	topicBuf = util_strndup(topic, topic_len);
+	dataBuf = util_strndup(data, data_len);
+	
 	INFO("Receive topic: %s, data: %s \r\n", topicBuf, dataBuf);
 	
-	if (os_strcmp(topicBuf, configInfoBlock.e[MQTTTOPIC].value) == 0){
-		if(!userStrnMatchi(dataBuf, "on", 2)){
-			relaySet(ON);
-		}
-		else if(!userStrnMatchi(dataBuf, "off", 3)){
-			relaySet(OFF);
-		}
-		else if(!userStrnMatchi(dataBuf, "toggle", 6)){
-			relayToggle();
-		}
-		else if(!userStrnMatchi(dataBuf, "pulse:", 6)){
-			int pulse_duration = atoi(dataBuf+6);
-			if(pulse_duration){
-				relaySet(ON);
-				os_timer_arm(&pulse_timer, pulse_duration, 0);
-			}			
-		}
-		else if(!userStrnMatchi(dataBuf, "query:state", 11)){
-			updateRelayState(relay_state);
-		}			
-	}
+	
+	if (!os_strcmp(topicBuf, commandTopic)){
+		// Decode command
+		for(i = 0; commandElements[i].command[0]; i++){
+			command_element *ce = &commandElements[i];
+			uint8_t cmdlen = os_strlen(ce->command);
+			//INFO("Trying %s\r\n", ce->command);
+			if(util_match_stringi(dataBuf, ce->command, cmdlen)){
+				if(CP_NONE == ce->type){ // Parameterless command
+					switch(i){
+						case CMD_OFF:
+							relaySet(OFF);
+							break;
+					
+						case CMD_ON:
+							relaySet(ON);
+							break;
+					
+						case CMD_TOGGLE:
+							relayToggle();
+							break;
+								
+						default:
+							util_assert(0, "Unsupported command: %d", i);
+					}
+					break;
+				}
+			}
+			
+			if((CP_INT == ce->type) || (CP_BOOL == ce->type)){ // Integer/bool parameter
+				if(util_parse_command_int(dataBuf, ce->command, &ce->p.i)){
+					if(CMD_PULSE == i){
+						relaySet(ON);
+						os_timer_arm(&pulse_timer, ce->p.i, 0);
+						break;
+					}
+				}
+							
+			}
+/*								
+					//INFO("Match\r\n");
+					if(CP_BOOL == ce->type)
+						ce->p.i= (ce->p.i) ? 1: 0;
+					//INFO("%s = %d\r\n", ce->command, ce->p.i);
+					if(!kvstore_update_number(configHandle, ce->command, ce->p.i))
+						INFO("Error storing integer parameter");
+					break;		
+*/	
+
+
+			
+		} /* END for */
+	} /* END if topic test */
 				
-	os_free(topicBuf);
-	os_free(dataBuf);
+	util_free(topicBuf);
+	util_free(dataBuf);
 }
 
 /*
  * Pulse timer callback function
  */
  
-void pulseTmerExpireCb(void *arg)
+LOCAL void ICACHE_FLASH_ATTR pulseTmerExpireCb(void *arg)
 {
 		relaySet(OFF);
 }
@@ -308,7 +364,7 @@ void pulseTmerExpireCb(void *arg)
  * Check for button state change
  */
  
-void buttonTimerCb(void *arg)
+LOCAL void ICACHE_FLASH_ATTR buttonTimerCb(void *arg)
 {
 	int newstate =  GPIO_INPUT_GET(BUTTON_GPIO);
 	
@@ -333,7 +389,7 @@ void buttonTimerCb(void *arg)
  * User initialization
  */
 
-void user_init(void)
+LOCAL void ICACHE_FLASH_ATTR relayInit(void)
 {
 	gpio_init();
 		
@@ -345,9 +401,35 @@ void user_init(void)
 	// Uart init
 	uart0_init(BIT_RATE_115200);
 
-	os_delay_us(1000000);
+	os_delay_us(2000000); // To allow gtkterm to come up
+	
 
-	/* Initialize MQTT connection */
+	// Read in the config sector from flash
+	configHandle = kvstore_open(KVS_DEFAULT_LOC);
+	
+	// Check for default configuration overrides
+/*	
+	if(!kvstore_exists(configHandle, commandElements[CMD_GMTOFFSET].command)){
+		kvstore_put(configHandle, commandElements[CMD_GMTOFFSET].command, configInfoBlock.e[GMTOFFSET].value);
+	}
+	if(!kvstore_exists(configHandle, commandElements[CMD_TIME24].command)){
+		kvstore_put(configHandle, commandElements[CMD_TIME24].command, configInfoBlock.e[TIME24].value);
+	}
+	
+	// Get the configurations we need from the KVS
+	
+	kvstore_get_integer(configHandle,  commandElements[CMD_GMTOFFSET].command, &commandElements[CMD_GMTOFFSET].p.i);
+	kvstore_get_integer(configHandle, commandElements[CMD_TIME24].command, &commandElements[CMD_TIME24].p.i);
+*/	
+		
+	// Write the KVS back out to flash	
+	
+	kvstore_flush(configHandle);
+	
+
+
+
+	// Initialize MQTT connection 
 	
 	uint8_t *host = configInfoBlock.e[MQTTHOST].value;
 	uint32_t port = (uint32_t) atoi(configInfoBlock.e[MQTTPORT].value);
@@ -365,20 +447,25 @@ void user_init(void)
 	MQTT_OnDisconnected(&mqttClient, mqttDisconnectedCb);
 	MQTT_OnPublished(&mqttClient, mqttPublishedCb);
 	MQTT_OnData(&mqttClient, mqttDataCb);
+	
+	// Subtopics
+	commandTopic = util_make_sub_topic(configInfoBlock.e[MQTTRTOPIC].value, "command");
+	statusTopic = util_make_sub_topic(configInfoBlock.e[MQTTRTOPIC].value, "status");
+	
 
 	os_timer_disarm(&pulse_timer);
 	os_timer_setfn(&pulse_timer, (os_timer_func_t *)pulseTmerExpireCb, (void *)0);
 	os_timer_disarm(&button_timer);
 	os_timer_setfn(&button_timer, (os_timer_func_t *)buttonTimerCb, (void *)0);
 
-	/* Attempt WIFI connection */
+	// Attempt WIFI connection
 	
-	uint8_t *ssid = configInfoBlock.e[WIFISSID].value;
-	uint8_t *wifipass = configInfoBlock.e[WIFIPASS].value;
+	char *ssid = configInfoBlock.e[WIFISSID].value;
+	char *wifipass = configInfoBlock.e[WIFIPASS].value;
 	
 	INFO("Attempting connection with: %s\r\n", ssid);
-	INFO("Main topic: %s\r\n", configInfoBlock.e[MQTTTOPIC].value);
-	INFO("Status topic: %s\r\n", configInfoBlock.e[MQTTSTOPIC].value);
+	INFO("Command subtopic: %s\r\n", commandTopic);
+	INFO("Status subtopic: %s\r\n", statusTopic);
 	
 	WIFI_Connect(ssid, wifipass, wifiConnectCb);
 	
@@ -390,3 +477,13 @@ void user_init(void)
 	INFO("\r\nSystem started ...\r\n");
 
 }
+
+/*
+ * Called from startup
+ */
+ 
+void user_init(void)
+{
+	relayInit();
+}
+
