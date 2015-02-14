@@ -12,11 +12,9 @@
  */
  
 
-void ICACHE_FLASH_ATTR util_assert_handler(char *file, unsigned line, char *info)
-{
-	
-	os_printf("Assertion failed. File: %s Line: %d Info: %s\n", file, line, info);
-	
+void ICACHE_FLASH_ATTR util_assert_handler(void)
+{	
+	os_printf("\r\n");
 	ets_delay_us(250000);
 	system_restart();
 }

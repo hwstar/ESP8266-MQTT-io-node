@@ -1,10 +1,17 @@
 
 
-#define util_assert(t, i) if(!(t))util_assert_handler(__FILE__, __LINE__, i)
+#define util_assert(t, f, ...){\
+	if(!(t)){\
+		os_printf("Assertion failed. File: %s Line: %d\r\nMessage: ", __FILE__, __LINE__);\
+		os_printf(f, __VA_ARGS__);\
+		util_assert_handler();\
+	}\
+}
+
 #define util_zalloc(sz) ((void *) os_zalloc((sz)))
 #define util_free(p) os_free((p))
 
-void util_assert_handler(char *file, unsigned line, char *info);
+void util_assert_handler(void);
 char *util_string_split(const char *in_str, char **list, char sep, int max_list_length);
 char * util_make_sub_topic(const char *rootTopic, char *subTopic);
 char * util_strdup(const char *s);
