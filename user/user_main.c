@@ -131,14 +131,15 @@ LOCAL config_info_block configInfoBlock = {
 
 /* Command elements */
  
-enum {CMD_OFF = 0, CMD_ON, CMD_TOGGLE, CMD_PULSE};
+enum {CMD_OFF = 0, CMD_ON, CMD_TOGGLE, CMD_PULSE, CMD_MQTTBTLOCAL};
 
-LOCAL command_element commandElements[5] = {
+LOCAL command_element commandElements[] = {
 	{.command = "OFF", .type = CP_NONE},
 	{.command = "ON", .type = CP_NONE},
 	{.command = "TOGGLE", .type = CP_NONE},
 	{.command = "PULSE", .type = CP_INT},
-	{.command = ""}
+	{.command = "MQTTBTLOCAL", .type = CP_INT},
+	{.command = ""} /* End marker */
 };
 	
 
@@ -146,7 +147,6 @@ LOCAL const char *infoString = "root:%s;ip4:%d.%d.%d.%d;schema:hwstar.relaynode"
 
 LOCAL int relay_state = OFF;
 LOCAL int button_state = 1;
-LOCAL int localControl = 1;
 LOCAL char *commandTopic, *statusTopic;
 LOCAL flash_handle_s *configHandle;
 LOCAL os_timer_t pulse_timer, button_timer;
@@ -323,26 +323,21 @@ LOCAL void ICACHE_FLASH_ATTR mqttDataCb(uint32_t *args, const char* topic, uint3
 			
 			if((CP_INT == ce->type) || (CP_BOOL == ce->type)){ // Integer/bool parameter
 				if(util_parse_command_int(dataBuf, ce->command, &ce->p.i)){
-					if(CMD_PULSE == i){
+					if(CMD_PULSE == i){ /* Pulse relay */
 						relaySet(ON);
 						os_timer_arm(&pulse_timer, ce->p.i, 0);
 						break;
 					}
+					if(CMD_MQTTBTLOCAL == i){ /* option: local button toggles relay */
+						ce->p.i = (ce->p.i) ? 1: 0;
+						kvstore_update_number(configHandle, ce->command, ce->p.i);
+						break;
+						
+					}
+					
 				}
 							
-			}
-/*								
-					//INFO("Match\r\n");
-					if(CP_BOOL == ce->type)
-						ce->p.i= (ce->p.i) ? 1: 0;
-					//INFO("%s = %d\r\n", ce->command, ce->p.i);
-					if(!kvstore_update_number(configHandle, ce->command, ce->p.i))
-						INFO("Error storing integer parameter");
-					break;		
-*/	
-
-
-			
+			}		
 		} /* END for */
 	} /* END if topic test */
 				
@@ -372,7 +367,7 @@ LOCAL void ICACHE_FLASH_ATTR buttonTimerCb(void *arg)
 		if(newstate){
 			char result[32];
 			
-			if(localControl) // If local control enabled
+			if(commandElements[CMD_MQTTBTLOCAL].p.i) // If local control enabled
 				relayToggle(); // Toggle the relay state
 			INFO("Button released\r\n");
 		}
@@ -408,27 +403,18 @@ LOCAL void ICACHE_FLASH_ATTR relayInit(void)
 	configHandle = kvstore_open(KVS_DEFAULT_LOC);
 	
 	// Check for default configuration overrides
-/*	
-	if(!kvstore_exists(configHandle, commandElements[CMD_GMTOFFSET].command)){
-		kvstore_put(configHandle, commandElements[CMD_GMTOFFSET].command, configInfoBlock.e[GMTOFFSET].value);
+	if(!kvstore_exists(configHandle, commandElements[CMD_MQTTBTLOCAL].command)){
+		kvstore_put(configHandle, commandElements[CMD_MQTTBTLOCAL].command, configInfoBlock.e[CMD_MQTTBTLOCAL].value);
 	}
-	if(!kvstore_exists(configHandle, commandElements[CMD_TIME24].command)){
-		kvstore_put(configHandle, commandElements[CMD_TIME24].command, configInfoBlock.e[TIME24].value);
-	}
-	
+
 	// Get the configurations we need from the KVS
 	
-	kvstore_get_integer(configHandle,  commandElements[CMD_GMTOFFSET].command, &commandElements[CMD_GMTOFFSET].p.i);
-	kvstore_get_integer(configHandle, commandElements[CMD_TIME24].command, &commandElements[CMD_TIME24].p.i);
-*/	
-		
+	kvstore_get_integer(configHandle,  commandElements[CMD_MQTTBTLOCAL].command, &commandElements[CMD_MQTTBTLOCAL].p.i);
+
 	// Write the KVS back out to flash	
 	
 	kvstore_flush(configHandle);
 	
-
-
-
 	// Initialize MQTT connection 
 	
 	uint8_t *host = configInfoBlock.e[MQTTHOST].value;
@@ -453,6 +439,7 @@ LOCAL void ICACHE_FLASH_ATTR relayInit(void)
 	statusTopic = util_make_sub_topic(configInfoBlock.e[MQTTRTOPIC].value, "status");
 	
 
+	// Timers
 	os_timer_disarm(&pulse_timer);
 	os_timer_setfn(&pulse_timer, (os_timer_func_t *)pulseTmerExpireCb, (void *)0);
 	os_timer_disarm(&button_timer);
@@ -467,10 +454,10 @@ LOCAL void ICACHE_FLASH_ATTR relayInit(void)
 	INFO("Command subtopic: %s\r\n", commandTopic);
 	INFO("Status subtopic: %s\r\n", statusTopic);
 	
+	// Attempt to connect to AP
 	WIFI_Connect(ssid, wifipass, wifiConnectCb);
 	
-	// Set local control option based on config
-	localControl = atoi(configInfoBlock.e[MQTTBTLOCAL].value);
+	// Sample button every 100 mSec
 	
 	os_timer_arm(&button_timer, 100, 1);
 	
