@@ -25,7 +25,7 @@ ESPPORT		?= /dev/ttyUSB0
 TARGET		= app
 
 # which modules (subdirectories) of the project to include in compiling
-MODULES		= driver mqtt user
+MODULES		= driver mqtt util user
 EXTRA_INCDIR    = include $(SDK_BASE)/../include
 
 # libraries used in this project, mainly provided by the SDK
@@ -132,6 +132,15 @@ cfgflash: firmware/0x00000.bin firmware/0x40000.bin my.cfg
 	$(PYTHON) $(ESPCFGPATCHER) patch firmware/0x00000.bin my.cfg firmware/0x00000-patched.bin
 	$(PYTHON) $(ESPTOOL) -p $(ESPPORT) write_flash 0x00000 firmware/0x00000-patched.bin 0x3C000 $(BLANKER) 0x40000 firmware/0x40000.bin
 
+cft: firmware/0x00000.bin firmware/0x40000.bin my.cfg
+	-killall gtkterm
+	xtensa-lx106-elf-objdump -t build/app.out >app.sym
+	-dumpmem.sh build/app.out
+	sleep 1
+	$(PYTHON) $(ESPCFGPATCHER) patch firmware/0x00000.bin cft.cfg firmware/0x00000-patched.bin
+	$(PYTHON) $(ESPTOOL) -p $(ESPPORT) write_flash 0x00000 firmware/0x00000-patched.bin 0x3C000 $(BLANKER) 0x40000 firmware/0x40000.bin
+	sleep 1
+	gtkterm &
 
 flash: firmware/0x00000.bin firmware/0x40000.bin
 	$(PYTHON) $(ESPTOOL) -p $(ESPPORT) write_flash 0x00000 firmware/0x00000.bin 0x3C000 $(BLANKER) 0x40000 firmware/0x40000.bin
