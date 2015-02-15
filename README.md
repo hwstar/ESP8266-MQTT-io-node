@@ -7,6 +7,7 @@ This is an implementation of an MQTT Relay Node
 Provides one relay channel on GPIO2 and one button channel on GPIO0. Button channel can be linked to the relay for local control or isolated for separate use.
 
 MQTT commands supported:
+
 |Command| Description |
 |-------| ----------- |
 |ON 	| Turns relay on|
