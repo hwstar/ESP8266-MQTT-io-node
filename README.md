@@ -7,13 +7,14 @@ This is an implementation of an MQTT Relay Node
 Provides one relay channel on GPIO2 and one button channel on GPIO0. Button channel can be linked to the relay for local control or isolated for separate use.
 
 MQTT commands supported:
-
-ON 		| Turns relay on
-OFF		| Turns relay off
-PULSE:n	| Pulses relay for N seconds
-TOGGLE	| Toggles relay state
-QUERY	| Returns relay state
-SURVEY	| Returns WIFI survey information as seen by the node.
+|Command| Description |
+|-------| ----------- |
+|ON 	| Turns relay on|
+|OFF	| Turns relay off|
+|PULSE:n| Pulses relay for N seconds|
+|TOGGLE	| Toggles relay state|
+|QUERY	| Returns relay state|
+|SURVEY	| Returns WIFI survey information as seen by the node|
 
 After booting, the node posts a message to /node/info with the following data:
 
