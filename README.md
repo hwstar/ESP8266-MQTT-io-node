@@ -4,7 +4,7 @@ This is an implementation of an MQTT Relay Node
 
 **Features:**
 
-Provides one relay channel on GPIO2 and one button channel on GPIO0. Button channel can be linked to the relay for local control or isolated for separate use.
+Provides one relay channel on GPIO12 and one button channel on GPIO0. Button channel can be linked to the relay for local control or isolated for separate use.
 
 MQTT commands supported:
 
@@ -12,7 +12,7 @@ MQTT commands supported:
 |-------| ----------- |
 |ON 	| Turns relay on|
 |OFF	| Turns relay off|
-|PULSE:n| Pulses relay for N seconds|
+|PULSE:n| Pulses relay for N milliseconds|
 |TOGGLE	| Toggles relay state|
 |QUERY	| Returns relay state|
 |SURVEY	| Returns WIFI survey information as seen by the node|
@@ -53,6 +53,13 @@ https://github.com/hwstar/ESP8266-MQTT-config-patcher
 
 Post patching allows the configuration to be changed without having sensitive information in the source files.
 
+** Electrical Details **
+
+The code is configured to be used with an ESP module which has GPIO12. It can be reconfigured, but use of GPIO2 is problematic as that pin needs to be
+high during boot, and that makes the electrical interface more complex.
+
+The output of GPIO12 is low true to be compatible with the bootloader's initial pin states. 
+(This prevents the relay from pulsing at power on).
 
 ** Notes **
 
