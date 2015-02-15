@@ -16,6 +16,7 @@ QUERY	| Returns relay state
 SURVEY	| Returns WIFI survey information as seen by the node.
 
 After booting, the node posts a message to /node/info with the following data:
+
 |Field		| Description|
 |-----      | -----------|
 |ROOT TOPIC	| A root topic name (e.g. /home/lab/relay)|
