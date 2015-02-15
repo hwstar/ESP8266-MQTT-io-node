@@ -1,10 +1,12 @@
-**esp_8266_io_node**
+**esp_8266_MQTT_io_node**
 ==========
 This is an implementation of an MQTT Relay Node 
 
 **Features:**
 
 Provides one relay channel on GPIO12 and one button channel on GPIO0. Button channel can be linked to the relay for local control or isolated for separate use.
+
+**Commands**
 
 MQTT commands supported:
 
@@ -17,6 +19,8 @@ MQTT commands supported:
 |QUERY	| Returns relay state|
 |SURVEY	| Returns WIFI survey information as seen by the node|
 
+**Power on Message**
+
 After booting, the node posts a message to /node/info with the following data:
 
 |Field		| Description|
@@ -25,14 +29,15 @@ After booting, the node posts a message to /node/info with the following data:
 |IP ADDRESS	| The IP address assigned to the node|
 |SCHEMA		| A schema name of hwstar.relaynode (vendor.product ala xPL)|
 
-The schema may be used to design a database of supported commands for each device:
 
-Example message:
+The schema may be used to design a database of supported commands for each device:
 
 root:/home/lab/relay;ip4:127.0.0.1;schema:hwstar.relaynode
 
 The root topic encompasses subtopics command and status. Commands are sent to $ROOT_TOPIC/command (which the nodes subscribes to.) Status messages are
 published by the node on $ROOT_TOPIC/status. The ROOT_TOPIC is set using the Configuration procedure described below.
+
+**Status Messages**
 
 Status messages which can be published:
 
@@ -46,14 +51,17 @@ AP: $AP, CHAN: $CHAN, RSSI: $RSSI
 
 Can be multiple lines. One entry per line. 
 
+**Configuration Patcher**
+
 NB: WIFI and MQTT Configration is not stored in the source files. It is patched in using a custom Python utility which is available on my github account as
 a separate project:
+
 
 https://github.com/hwstar/ESP8266-MQTT-config-patcher
 
 Post patching allows the configuration to be changed without having sensitive information in the source files.
 
-** Electrical Details **
+**Electrical Details**
 
 The code is configured to be used with an ESP module which has GPIO12. It can be reconfigured, but use of GPIO2 is problematic as that pin needs to be
 high during boot, and that makes the electrical interface more complex.
@@ -61,7 +69,7 @@ high during boot, and that makes the electrical interface more complex.
 The output of GPIO12 is low true to be compatible with the bootloader's initial pin states. 
 (This prevents the relay from pulsing at power on).
 
-** Notes **
+**Notes**
 
 Supports Linux build host only at this time.
 Requires the ESP8266 toolchain be installed on the Linux system per the instructions available here:
