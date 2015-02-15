@@ -12,7 +12,8 @@
 #define util_free(p) os_free((p))
 
 void util_assert_handler(void);
-char *util_string_split(const char *in_str, char **list, char sep, int max_list_length);
+char * util_str_realloc(const char *p, size_t new_len);
+char * util_string_split(const char *in_str, char **list, char sep, int max_list_length);
 char * util_make_sub_topic(const char *rootTopic, char *subTopic);
 char * util_strdup(const char *s);
 char * util_strndup(const char *s, int len);

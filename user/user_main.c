@@ -131,7 +131,7 @@ LOCAL config_info_block configInfoBlock = {
 
 /* Command elements */
  
-enum {CMD_OFF = 0, CMD_ON, CMD_TOGGLE, CMD_PULSE, CMD_MQTTBTLOCAL};
+enum {CMD_OFF = 0, CMD_ON, CMD_TOGGLE, CMD_PULSE, CMD_MQTTBTLOCAL, CMD_QUERY, CMD_SURVEY};
 
 LOCAL command_element commandElements[] = {
 	{.command = "OFF", .type = CP_NONE},
@@ -139,6 +139,8 @@ LOCAL command_element commandElements[] = {
 	{.command = "TOGGLE", .type = CP_NONE},
 	{.command = "PULSE", .type = CP_INT},
 	{.command = "MQTTBTLOCAL", .type = CP_INT},
+	{.command = "QUERY", .type = CP_NONE},
+	{.command = "SURVEY", .type = CP_NONE},
 	{.command = ""} /* End marker */
 };
 	
@@ -220,6 +222,37 @@ LOCAL void ICACHE_FLASH_ATTR wifiConnectCb(uint8_t status)
 		MQTT_Connect(&mqttClient);
 	}
 }
+
+/*
+ * Survey complete,
+ * publish results
+ */
+
+
+LOCAL void ICACHE_FLASH_ATTR
+survey_complete_cb(void *arg, STATUS status)
+{
+	struct bss_info *bss = arg;
+	
+	#define SURVEY_CHUNK_SIZE 128
+	
+	if(status == OK){
+		uint8_t i;
+		char *buf = util_zalloc(SURVEY_CHUNK_SIZE);
+		bss = bss->next.stqe_next; //ignore first
+		for(i = 2; (bss); i++){
+			os_sprintf(strlen(buf)+ buf, "AP: %s, CHAN: %d, RSSI: %d\r\n", bss->ssid, bss->channel, bss->rssi);
+			bss = bss->next.stqe_next;
+			buf = util_str_realloc(buf, i * SURVEY_CHUNK_SIZE);
+		}
+		INFO("Survey Results:\r\n", buf);
+		INFO(buf);
+		MQTT_Publish(&mqttClient, statusTopic, buf, os_strlen(buf), 0, 0);
+		util_free(buf);
+	}
+
+}
+
 
 /*
  * MQTT Connect call back
@@ -313,7 +346,15 @@ LOCAL void ICACHE_FLASH_ATTR mqttDataCb(uint32_t *args, const char* topic, uint3
 						case CMD_TOGGLE:
 							relayToggle();
 							break;
-								
+						
+						case CMD_QUERY:
+							updateRelayState(relay_state);
+							break;
+							
+						case CMD_SURVEY:
+							wifi_station_scan(NULL, survey_complete_cb);
+							break;
+							
 						default:
 							util_assert(0, "Unsupported command: %d", i);
 					}

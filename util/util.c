@@ -5,7 +5,6 @@
 #include "user_interface.h"
 #include "util.h"
 
-#include "stdarg.h"
 
 /*
  * Assert error handler
@@ -18,6 +17,23 @@ void ICACHE_FLASH_ATTR util_assert_handler(void)
 	ets_delay_us(250000);
 	system_restart();
 }
+
+
+
+/*
+ * util_str_realloc - return a new string pointer in a larger buffer
+ */
+ 
+char * ICACHE_FLASH_ATTR util_str_realloc(const char *p, size_t new_len)
+{
+	size_t oldlen = strlen(p) + 1;
+	util_assert(new_len > oldlen + 1, "New string smaller than original string. new length: %d, old length: %d", new_len, oldlen); 
+	char *n =  util_zalloc(new_len);
+	os_strcpy(n, p);
+	util_free(p);
+	return n;
+}
+
 
 
 /*
