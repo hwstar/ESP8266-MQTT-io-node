@@ -8,20 +8,20 @@ Provides one relay channel on GPIO2 and one button channel on GPIO0. Button chan
 
 MQTT commands supported:
 
-ON 		- Turns relay on
-OFF		- Turns relay off
-PULSE:n	- Pulses relay for N seconds
-TOGGLE	- Toggles relay state
-QUERY	- Returns relay state
-SURVEY	- Returns WIFI survey information as seen by the node.
+ON 		| Turns relay on
+OFF		| Turns relay off
+PULSE:n	| Pulses relay for N seconds
+TOGGLE	| Toggles relay state
+QUERY	| Returns relay state
+SURVEY	| Returns WIFI survey information as seen by the node.
 
-After booting, the node posts a message to /node/info with the following data
+After booting, the node posts a message to /node/info with the following data:
 
-ROOT TOPIC		- A root topic name (e.g. /home/lab/relay)
-IP ADDRESS		- The IP address assigned to the node
-SCHEMA			- A schema name of hwstar.relaynode (vendor.product ala xPL) 
+ROOT TOPIC	| A root topic name (e.g. /home/lab/relay)
+IP ADDRESS	| The IP address assigned to the node
+SCHEMA		| A schema name of hwstar.relaynode (vendor.product ala xPL) 
 
-The schema may be used to design a database of supported commands for each device.
+The schema may be used to design a database of supported commands for each device:
 
 Example message:
 
@@ -32,16 +32,15 @@ published by the node on $ROOT_TOPIC/status. The ROOT_TOPIC is set using the Con
 
 Status messages which can be published:
 
-BUTTONSTATE:DEPRESSED
-BUTTONSTATE:RELEASED
-RELAYSTATE:ON
-RELAYSTATE:OFF
+* BUTTONSTATE:DEPRESSED
+* BUTTONSTATE:RELEASED
+* RELAYSTATE:ON
+* RELAYSTATE:OFF
 
 WIFI Survey Data in the following format:
 AP: $AP, CHAN: $CHAN, RSSI: $RSSI
 
 Can be multiple lines. One entry per line. 
-
 
 NB: WIFI and MQTT Configration is not stored in the source files. It is patched in using a custom Python utility which is available on my github account as
 a separate project:
