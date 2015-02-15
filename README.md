@@ -1,16 +1,49 @@
 **esp_8266_io_node**
 ==========
-This is an implementation of a MQTT Relay Node using a port from: [MQTT client library for Contiki](https://github.com/esar/contiki-mqtt) (thanks)
+This is an implementation of an MQTT Relay Node 
 
 **Features:**
 
 Provides one relay channel on GPIO2 and one button channel on GPIO0. Button channel can be linked to the relay for local control or isolated for separate use.
 
-Relay can be turned on, turned off, pulsed or toggled.
+MQTT commands supported:
 
-There is an optional separate topic for relay state changes and button changes.
+ON 		- Turns relay on
+OFF		- Turns relay off
+PULSE:n	- Pulses relay for N seconds
+TOGGLE	- Toggles relay state
+QUERY	- Returns relay state
+SURVEY	- Returns WIFI survey information as seen by the node.
 
-WIFI and MQTT Configration is not stored in the source files. It is patched in using a custom Python utility which is available on my github account as
+After booting, the node posts a message to /node/info with the following data
+
+ROOT TOPIC		- A root topic name (e.g. /home/lab/relay)
+IP ADDRESS		- The IP address assigned to the node
+SCHEMA			- A schema name of hwstar.relaynode (vendor.product ala xPL) 
+
+The schema may be used to design a database of supported commands for each device.
+
+Example message:
+
+root:/home/lab/relay;ip4:127.0.0.1;schema:hwstar.relaynode
+
+The root topic encompasses subtopics command and status. Commands are sent to $ROOT_TOPIC/command (which the nodes subscribes to.) Status messages are
+published by the node on $ROOT_TOPIC/status. The ROOT_TOPIC is set using the Configuration procedure described below.
+
+Status messages which can be published:
+
+BUTTONSTATE:DEPRESSED
+BUTTONSTATE:RELEASED
+RELAYSTATE:ON
+RELAYSTATE:OFF
+
+WIFI Survey Data in the following format:
+AP: $AP, CHAN: $CHAN, RSSI: $RSSI
+
+Can be multiple lines. One entry per line. 
+
+
+NB: WIFI and MQTT Configration is not stored in the source files. It is patched in using a custom Python utility which is available on my github account as
 a separate project:
 
 https://github.com/hwstar/ESP8266-MQTT-config-patcher
