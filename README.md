@@ -26,6 +26,7 @@ After booting, the node posts a message to /node/info with the following data:
 
 |Field		| Description|
 |-----      | -----------|
+|CONNSTATE  | Conection state (online)
 |DEVICE		| A device path (e.g. /home/lab/relay)|
 |IP ADDRESS	| The IP address assigned to the node|
 |SCHEMA		| A schema name of hwstar.relaynode (vendor.product ala xPL)|
@@ -37,14 +38,14 @@ Here is an example:
 
 connstate:online;device:/home/lab/relay;ip4:127.0.0.1;schema:hwstar.relaynode
 
-The DEVPATH encompasses subtopics command and status. Commands are sent to $ROOT_TOPIC/command (which the nodes subscribes to.) Status messages are
-published by the node on $ROOT_TOPIC/status. The ROOT_TOPIC is set using the Configuration procedure described below.
+The device path encompasses subtopics command and status. Commands are sent to $device/command (which the nodes subscribes to.) Status messages are
+published by the node on $device/status. The device path is set using the Configuration procedure described below.
 
 **Last Will and Testament**
 
 The following will be published to /node/info if the node is not heard from by the MQTT broker:
 
-connstate:offline;devpath:$devpath
+connstate:offline;device:$device
 
 Where $device is the configured device path.
 
