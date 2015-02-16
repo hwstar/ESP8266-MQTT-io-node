@@ -18,6 +18,7 @@ MQTT commands supported:
 |TOGGLE	| Toggles relay state|
 |QUERY	| Returns relay state|
 |SURVEY	| Returns WIFI survey information as seen by the node|
+|MQTTBTLOCAL:n| 1 = link button to relay toggle, 0 = keep button separate|
 
 **Power on Message**
 
@@ -25,17 +26,27 @@ After booting, the node posts a message to /node/info with the following data:
 
 |Field		| Description|
 |-----      | -----------|
-|ROOT TOPIC	| A root topic name (e.g. /home/lab/relay)|
+|DEVICE		| A device path (e.g. /home/lab/relay)|
 |IP ADDRESS	| The IP address assigned to the node|
 |SCHEMA		| A schema name of hwstar.relaynode (vendor.product ala xPL)|
 
 
-The schema may be used to design a database of supported commands for each device:
+The schema may be used to design a database of supported commands for each device.
 
-root:/home/lab/relay;ip4:127.0.0.1;schema:hwstar.relaynode
+Here is an example:
 
-The root topic encompasses subtopics command and status. Commands are sent to $ROOT_TOPIC/command (which the nodes subscribes to.) Status messages are
+connstate:online;device:/home/lab/relay;ip4:127.0.0.1;schema:hwstar.relaynode
+
+The DEVPATH encompasses subtopics command and status. Commands are sent to $ROOT_TOPIC/command (which the nodes subscribes to.) Status messages are
 published by the node on $ROOT_TOPIC/status. The ROOT_TOPIC is set using the Configuration procedure described below.
+
+**Last Will and Testament**
+
+The following will be published to /node/info if the node is not heard from by the MQTT broker:
+
+connstate:offline;devpath:$devpath
+
+Where $device is the configured device path.
 
 **Status Messages**
 

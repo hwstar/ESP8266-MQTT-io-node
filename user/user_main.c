@@ -105,7 +105,7 @@ typedef struct {
 
 typedef struct config_info_block_tag config_info_block;
 
-enum {WIFISSID=0, WIFIPASS, MQTTHOST, MQTTPORT, MQTTSECUR, MQTTDEVID, MQTTCLNT, MQTTPASS, MQTTKPALIV, MQTTRTOPIC, MQTTBTLOCAL};
+enum {WIFISSID=0, WIFIPASS, MQTTHOST, MQTTPORT, MQTTSECUR, MQTTDEVID, MQTTCLNT, MQTTPASS, MQTTKPALIV, MQTTDEVPATH, MQTTBTLOCAL};
 enum {CP_NONE= 0, CP_INT, CP_BOOL};
 
  
@@ -125,7 +125,7 @@ LOCAL config_info_block configInfoBlock = {
 	.e[MQTTCLNT] = {.key = "MQTTCLNT", .value="your_mqtt_client_name_here"}, // Only relevant if MQTTSECUR is other than 0
 	.e[MQTTPASS] = {.key = "MQTTPASS", .value="its_a_secret"},// Only relevant if MQTTSECUR is other than 0
 	.e[MQTTKPALIV] = {.key = "MQTTKPALIV", .value="120"}, // Keepalive interval
-	.e[MQTTRTOPIC] = {.flags = CONFIG_FLD_REQD, .key = "MQTTRTOPIC", .value = "/home/lab/relay"}, // Root topic
+	.e[MQTTDEVPATH] = {.flags = CONFIG_FLD_REQD, .key = "MQTTDEVPATH", .value = "/home/lab/relay"}, // Device path
 	.e[MQTTBTLOCAL] = {.key = "MQTTBTLOCAL", .value = "1"} // Optional local toggle control using GPIO0
 };
 
@@ -145,7 +145,6 @@ LOCAL command_element commandElements[] = {
 };
 	
 
-LOCAL const char *infoString = "root:%s;ip4:%d.%d.%d.%d;schema:hwstar.relaynode";	
 
 LOCAL int relay_state = OFF;
 LOCAL int button_state = 1;
@@ -260,17 +259,17 @@ survey_complete_cb(void *arg, STATUS status)
  
 LOCAL void ICACHE_FLASH_ATTR mqttConnectedCb(uint32_t *args)
 {
-	char *buf = util_zalloc(os_strlen(configInfoBlock.e[MQTTRTOPIC].value) + os_strlen(infoString) + 1);
 	struct ip_info ipConfig;
 	MQTT_Client* client = (MQTT_Client*)args;
+	char *buf = util_zalloc(256);	
+
 	
 	INFO("MQTT: Connected\r\n");
 	
 	// Publish who we are and where we live
 	wifi_get_ip_info(STATION_IF, &ipConfig);
-	
-	os_sprintf(buf, infoString,
-			configInfoBlock.e[MQTTRTOPIC].value,
+	os_sprintf(buf, "connstate:online;device:%s;ip4:%d.%d.%d.%d;schema:hwstar.relaynode",
+			configInfoBlock.e[MQTTDEVPATH].value,
 			*((uint8_t *) &ipConfig.ip.addr),
 			*((uint8_t *) &ipConfig.ip.addr + 1),
 			*((uint8_t *) &ipConfig.ip.addr + 2),
@@ -279,6 +278,7 @@ LOCAL void ICACHE_FLASH_ATTR mqttConnectedCb(uint32_t *args)
 	INFO("MQTT Node info: %s\r\n", buf);
 
 	MQTT_Publish(client, "/node/info", buf, os_strlen(buf), 0, 0);
+	
 	
 	// Subscribe to command topic
 	MQTT_Subscribe(client, commandTopic, 0);
@@ -427,6 +427,9 @@ LOCAL void ICACHE_FLASH_ATTR buttonTimerCb(void *arg)
 
 LOCAL void ICACHE_FLASH_ATTR relayInit(void)
 {
+	char *buf = util_zalloc(256); // Working buffer
+	
+	// I/O initialization
 	gpio_init();
 		
 	// Initialize relay GPIO as an output
@@ -468,16 +471,19 @@ LOCAL void ICACHE_FLASH_ATTR relayInit(void)
 	configInfoBlock.e[MQTTCLNT].value, configInfoBlock.e[MQTTPASS].value,
 	atoi(configInfoBlock.e[MQTTKPALIV].value), 1);
 
-
-	MQTT_InitLWT(&mqttClient, "/lwt", "offline", 0, 0);
 	MQTT_OnConnected(&mqttClient, mqttConnectedCb);
 	MQTT_OnDisconnected(&mqttClient, mqttDisconnectedCb);
 	MQTT_OnPublished(&mqttClient, mqttPublishedCb);
 	MQTT_OnData(&mqttClient, mqttDataCb);
 	
+	// Last will and testament
+
+	os_sprintf(buf, "connstate:offline;device:%s", configInfoBlock.e[MQTTDEVPATH].value);
+	MQTT_InitLWT(&mqttClient, "/node/info", buf, 0, 0);
+
 	// Subtopics
-	commandTopic = util_make_sub_topic(configInfoBlock.e[MQTTRTOPIC].value, "command");
-	statusTopic = util_make_sub_topic(configInfoBlock.e[MQTTRTOPIC].value, "status");
+	commandTopic = util_make_sub_topic(configInfoBlock.e[MQTTDEVPATH].value, "command");
+	statusTopic = util_make_sub_topic(configInfoBlock.e[MQTTDEVPATH].value, "status");
 	
 
 	// Timers
@@ -501,6 +507,9 @@ LOCAL void ICACHE_FLASH_ATTR relayInit(void)
 	// Sample button every 100 mSec
 	
 	os_timer_arm(&button_timer, 100, 1);
+	
+	// Free working buffer
+	util_free(buf);
 	
 	INFO("\r\nSystem started ...\r\n");
 
