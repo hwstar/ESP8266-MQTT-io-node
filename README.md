@@ -82,11 +82,12 @@ high during boot, and that makes the electrical interface more complex.
 The output of GPIO12 is low true to be compatible with the bootloader's initial pin states. 
 (This prevents the relay from pulsing at power on).
 
-**Notes**
+**Toolchain**
 
-Supports Linux build host only at this time.
 Requires the ESP8266 toolchain be installed on the Linux system per the instructions available here:
 https://github.com/esp8266/esp8266-wiki/wiki/Toolchain
+
+NB:Current Makefile supports Linux build hosts only at this time.
 
 **LICENSE - "MIT License"**
 
