@@ -1,6 +1,7 @@
 **esp_8266_MQTT_io_node**
 ==========
-This is an implementation of an MQTT Relay Node 
+This is an implementation of an MQTT Relay Node which runs natively on an ESP8266 ESP-03 module or other variant with GPIO12 support.
+Code is compiled using the toolchain referenced below.
 
 **Features:**
 
