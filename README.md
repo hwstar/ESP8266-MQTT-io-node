@@ -27,7 +27,7 @@ After booting, the node posts a message to /node/info with the following data:
 
 |Field		| Description|
 |-----      | -----------|
-|CONNSTATE  | Conection state (online)
+|CONNSTATE  | Connection state (online)
 |DEVICE		| A device path (e.g. /home/lab/relay)|
 |IP ADDRESS	| The IP address assigned to the node|
 |SCHEMA		| A schema name of hwstar.relaynode (vendor.product ala xPL)|
