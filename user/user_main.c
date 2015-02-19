@@ -44,7 +44,6 @@
 #include "osapi.h"
 #include "mqtt.h"
 #include "wifi.h"
-#include "config.h"
 #include "debug.h"
 #include "gpio.h"
 #include "user_interface.h"
