@@ -49,21 +49,50 @@
 #include "user_interface.h"
 #include "mem.h"
 
+#include "easygpio.h"
 #include "util.h"
 #include "kvstore.h"
+
+/* Operational modes */
+
+#define STANDARD 0		// Single output
+#define LATCHING 1		// Pulsed dual output (latching relay use)
+
+// Operational mode
+
+#define MODE STANDARD	// Set standard mode of operation
+//#define WITH_LED		// Include LED code
+
+#if STANDARD==MODE // GPIO setup for standard
+
+#define RELAY_GPIO 12 
+
+#define BUTTON_GPIO 0
+
+#define LED_GPIO 14
+
+#endif // End standard setup
+
+#if STANDARD==LATCHING // Gpio setup for latching
+
+#define RELAY_SET_GPIO 13
+#define RELAY_CLEAR_GPIO 12
+
+#define BUTTON_GPIO 0
+
+#define LED_GPIO 14
+
+
+#endif // End latching setup
+
+
+/* General definitions */
 
 #define ON 1
 #define OFF 0
 
-#define RELAY_GPIO 12
-#define RELAY_GPIO_MUX PERIPHS_IO_MUX_MTDI_U
-#define RELAY_GPIO_FUNC FUNC_GPIO12
 #define RELAY_ON 0
 #define RELAY_OFF 1
-
-#define BUTTON_GPIO 0
-#define BUTTON_GPIO_MUX PERIPHS_IO_MUX_GPIO0_U
-#define BUTTON_GPIO_FUNC FUNC_GPIO0
 
 
 #define MAX_INFO_ELEMENTS 16
@@ -176,7 +205,9 @@ LOCAL void ICACHE_FLASH_ATTR updateRelayState(int s)
 LOCAL void ICACHE_FLASH_ATTR relaySet(bool new_state)
 {
 	relay_state = new_state;
+	#if STANDARD==MODE
 	GPIO_OUTPUT_SET(RELAY_GPIO, ((relay_state) ? RELAY_ON : RELAY_OFF));
+	#endif
 	updateRelayState(relay_state);
 }
 	
@@ -331,8 +362,8 @@ LOCAL void ICACHE_FLASH_ATTR mqttDataCb(uint32_t *args, const char* topic, uint3
 			command_element *ce = &commandElements[i];
 			uint8_t cmdlen = os_strlen(ce->command);
 			//INFO("Trying %s\r\n", ce->command);
-			if(util_match_stringi(dataBuf, ce->command, cmdlen)){
-				if(CP_NONE == ce->type){ // Parameterless command
+			if(CP_NONE == ce->type){ // Parameterless command
+				if(util_match_stringi(dataBuf, ce->command, cmdlen)){
 					switch(i){
 						case CMD_OFF:
 							relaySet(OFF);
@@ -430,11 +461,17 @@ LOCAL void ICACHE_FLASH_ATTR relayInit(void)
 	
 	// I/O initialization
 	gpio_init();
-		
-	// Initialize relay GPIO as an output
-	PIN_FUNC_SELECT(RELAY_GPIO_MUX, RELAY_GPIO_FUNC);
-	GPIO_OUTPUT_SET(RELAY_GPIO, RELAY_OFF); // Relay off initially
 	
+	#if STANDARD==MODE	 // Standard init
+	// Initialize relay GPIO as an output
+	easygpio_pinMode(RELAY_GPIO, EASYGPIO_NOPULL, EASYGPIO_OUTPUT);
+	// Initialize output state
+	GPIO_OUTPUT_SET(RELAY_GPIO, RELAY_OFF);
+	
+	// Initialize button GPIO input
+	easygpio_pinMode(BUTTON_GPIO, EASYGPIO_PULLUP, EASYGPIO_INPUT);
+	
+	#endif // End standard init
 	
 	// Uart init
 	uart0_init(BIT_RATE_115200);
