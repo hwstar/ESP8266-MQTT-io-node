@@ -60,8 +60,14 @@
 
 // Operational mode
 
+#ifndef MODE
 #define MODE STANDARD	// Set standard mode of operation
-//#define WITH_LED		// Include LED code
+#endif
+
+#ifndef WITH_LED
+#define WITH_LED		// Include LED code
+#endif
+
 
 #if STANDARD==MODE // GPIO setup for standard
 
@@ -73,7 +79,7 @@
 
 #endif // End standard setup
 
-#if STANDARD==LATCHING // Gpio setup for latching
+#if LATCHING==MODE // Gpio setup for latching
 
 #define RELAY_SET_GPIO 13
 #define RELAY_CLEAR_GPIO 12
@@ -94,6 +100,10 @@
 #define RELAY_ON 0
 #define RELAY_OFF 1
 
+#define LED_ON 0
+#define LED_OFF 1
+
+#define LED_FLASH_COUNT 2
 
 #define MAX_INFO_ELEMENTS 16
 #define INFO_BLOCK_MAGIC 0x3F2A6C17
@@ -174,23 +184,34 @@ LOCAL command_element commandElements[] = {
 	
 
 
-LOCAL int relay_state = OFF;
-LOCAL int button_state = 1;
+LOCAL int relayState = OFF;
+
+#if MODE==LATCHING
+typedef enum {LR_IDLE = 0, LR_SET, LR_CLEAR, LR_DONE} lrstatetype;
+LOCAL lrstatetype lrState;
+#endif
+
+#ifdef WITH_LED
+typedef enum {LC_OFF = 0, LC_ON, LC_FLASH, LC_FLASH_OFF} lcstatetype;
+LOCAL lcstatetype lcState;
+#endif
+
+LOCAL int buttonState = 1;
 LOCAL char *commandTopic, *statusTopic;
 LOCAL flash_handle_s *configHandle;
-LOCAL os_timer_t pulse_timer, button_timer;
+LOCAL os_timer_t pulseTimer, buttonTimer;
 
 MQTT_Client mqttClient;
 
-/*
+/**
  * Send relay state update message
  */
  
 LOCAL void ICACHE_FLASH_ATTR updateRelayState(int s)
 {
-	char *state = s ? "ON" : "OFF";
+	char *state = s ? "on" : "off";
 	char result[16];
-	os_strcpy(result,"RELAYSTATE:");
+	os_strcpy(result,"relaystate:");
 	os_strcat(result, state);
 	INFO("MQTT: New Relay State: %s\r\n", state);
 	MQTT_Publish(&mqttClient, statusTopic, result, os_strlen(result), 0, 0);
@@ -198,32 +219,38 @@ LOCAL void ICACHE_FLASH_ATTR updateRelayState(int s)
 }
 
 
-/*
+/**
  * Set new relay state
  */
  
 LOCAL void ICACHE_FLASH_ATTR relaySet(bool new_state)
 {
-	relay_state = new_state;
+	relayState = new_state;
 	#if STANDARD==MODE
-	GPIO_OUTPUT_SET(RELAY_GPIO, ((relay_state) ? RELAY_ON : RELAY_OFF));
+	GPIO_OUTPUT_SET(RELAY_GPIO, ((relayState) ? RELAY_ON : RELAY_OFF));
 	#endif
-	updateRelayState(relay_state);
+	#if LATCHING==MODE
+		if(!lrState)
+			lrState = (new_state) ? LR_SET : LR_CLEAR;
+		else
+			INFO("Overlapped latching relay commands not supported yet. Command ignored while busy\r\n");
+	#endif	
+	updateRelayState(relayState);
 }
 	
 
 
-/*
+/**
  * Toggle the relay output
  */
 
 LOCAL void ICACHE_FLASH_ATTR relayToggle(void)
 {
-	bool new_relay_state = (relay_state) ? OFF : ON;
-	relaySet(new_relay_state);
+	bool new_relayState = (relayState) ? OFF : ON;
+	relaySet(new_relayState);
 }
 
-/*
+/**
  * Update the button state
  */
 
@@ -231,16 +258,16 @@ LOCAL void ICACHE_FLASH_ATTR updateButtonState(int s)
 {
 
 	
-	char *state = s ? "RELEASED" : "DEPRESSED";
+	char *state = s ? "released" : "depressed";
 	char result[25];
-	os_strcpy(result,"BUTTONSTATE:");
+	os_strcpy(result,"buttonstate:");
 	os_strcat(result, state);
 	INFO("MQTT: New Button State: %s\r\n", state);
 	MQTT_Publish(&mqttClient, statusTopic, result, os_strlen(result), 0, 0);
 	
 }
 
-/*
+/**
  * WIFI connect call back
  */
  
@@ -248,18 +275,26 @@ LOCAL void ICACHE_FLASH_ATTR updateButtonState(int s)
 LOCAL void ICACHE_FLASH_ATTR wifiConnectCb(uint8_t status)
 {
 	if(status == STATION_GOT_IP){
+		#ifdef WITH_LED
+		lcState = LC_FLASH;
+		#endif
 		MQTT_Connect(&mqttClient);
 	}
+	#ifdef WITH_LED
+	else
+		lcState = LC_OFF;
+	#endif
+	
 }
 
-/*
+/**
  * Survey complete,
  * publish results
  */
 
 
 LOCAL void ICACHE_FLASH_ATTR
-survey_complete_cb(void *arg, STATUS status)
+surveyCompleteCb(void *arg, STATUS status)
 {
 	struct bss_info *bss = arg;
 	
@@ -270,7 +305,7 @@ survey_complete_cb(void *arg, STATUS status)
 		char *buf = util_zalloc(SURVEY_CHUNK_SIZE);
 		bss = bss->next.stqe_next; //ignore first
 		for(i = 2; (bss); i++){
-			os_sprintf(strlen(buf)+ buf, "AP: %s, CHAN: %d, RSSI: %d\r\n", bss->ssid, bss->channel, bss->rssi);
+			os_sprintf(strlen(buf)+ buf, "ap: %s, chan: %d, rssi: %d\r\n", bss->ssid, bss->channel, bss->rssi);
 			bss = bss->next.stqe_next;
 			buf = util_str_realloc(buf, i * SURVEY_CHUNK_SIZE);
 		}
@@ -283,7 +318,7 @@ survey_complete_cb(void *arg, STATUS status)
 }
 
 
-/*
+/**
  * MQTT Connect call back
  */
  
@@ -295,6 +330,9 @@ LOCAL void ICACHE_FLASH_ATTR mqttConnectedCb(uint32_t *args)
 
 	
 	INFO("MQTT: Connected\r\n");
+	#ifdef WITH_LED
+	lcState = LC_ON;
+	#endif
 	
 	// Publish who we are and where we live
 	wifi_get_ip_info(STATION_IF, &ipConfig);
@@ -313,12 +351,12 @@ LOCAL void ICACHE_FLASH_ATTR mqttConnectedCb(uint32_t *args)
 	// Subscribe to command topic
 	MQTT_Subscribe(client, commandTopic, 0);
 	// Publish relay state
-	updateRelayState(relay_state); 
+	updateRelayState(relayState); 
 	// Free the buffer
 	util_free(buf);
 }
 
-/*
+/**
  * MQTT Disconnect call back
  */
  
@@ -327,9 +365,12 @@ LOCAL void ICACHE_FLASH_ATTR mqttDisconnectedCb(uint32_t *args)
 {
 	MQTT_Client* client = (MQTT_Client*)args;
 	INFO("MQTT: Disconnected\r\n");
+	#ifdef WITH_LED
+	lcState = LC_FLASH;
+	#endif
 }
 
-/*
+/**
  * MQTT published call back
  */
 
@@ -339,7 +380,7 @@ LOCAL void ICACHE_FLASH_ATTR mqttPublishedCb(uint32_t *args)
 	INFO("MQTT: Published\r\n");
 }
 
-/*
+/**
  * MQTT Data call back
  */
 
@@ -378,11 +419,11 @@ LOCAL void ICACHE_FLASH_ATTR mqttDataCb(uint32_t *args, const char* topic, uint3
 							break;
 						
 						case CMD_QUERY:
-							updateRelayState(relay_state);
+							updateRelayState(relayState);
 							break;
 							
 						case CMD_SURVEY:
-							wifi_station_scan(NULL, survey_complete_cb);
+							wifi_station_scan(NULL, surveyCompleteCb);
 							break;
 							
 						default:
@@ -396,7 +437,7 @@ LOCAL void ICACHE_FLASH_ATTR mqttDataCb(uint32_t *args, const char* topic, uint3
 				if(util_parse_command_int(dataBuf, ce->command, &ce->p.i)){
 					if(CMD_PULSE == i){ /* Pulse relay */
 						relaySet(ON);
-						os_timer_arm(&pulse_timer, ce->p.i, 0);
+						os_timer_arm(&pulseTimer, ce->p.i, 0);
 						break;
 					}
 					if(CMD_MQTTBTLOCAL == i){ /* option: local button toggles relay */
@@ -416,7 +457,7 @@ LOCAL void ICACHE_FLASH_ATTR mqttDataCb(uint32_t *args, const char* topic, uint3
 	util_free(dataBuf);
 }
 
-/*
+/**
  * Pulse timer callback function
  */
  
@@ -426,15 +467,15 @@ LOCAL void ICACHE_FLASH_ATTR pulseTmerExpireCb(void *arg)
 }
 
 
-/*
- * Check for button state change
+/**
+ * 100 millisecond timer callback
  */
  
-LOCAL void ICACHE_FLASH_ATTR buttonTimerCb(void *arg)
+LOCAL void ICACHE_FLASH_ATTR nodeTimerCb(void *arg)
 {
 	int newstate =  GPIO_INPUT_GET(BUTTON_GPIO);
 	
-	if(newstate != button_state){
+	if(newstate != buttonState){
 		if(newstate){
 			char result[32];
 			
@@ -445,13 +486,81 @@ LOCAL void ICACHE_FLASH_ATTR buttonTimerCb(void *arg)
 		else{
 			INFO("Button pressed\r\n");
 		}	
-		button_state = newstate;
-		updateButtonState(button_state);
+		buttonState = newstate;
+		updateButtonState(buttonState);
 	}
 	
+	#if LATCHING==MODE // Handle latching relay as state machine
+	if(lrState){
+		switch(lrState){
+	
+			case LR_SET:
+				GPIO_OUTPUT_SET(RELAY_SET_GPIO, RELAY_ON);
+				lrState = LR_DONE;
+				break;
+			
+			case LR_CLEAR:
+				//INFO("lr_clear\r\n");
+				GPIO_OUTPUT_SET(RELAY_CLEAR_GPIO, RELAY_ON);
+				lrState = LR_DONE;
+				break;
+				
+			case LR_DONE:
+				//INFO("lr_done\r\n");
+				GPIO_OUTPUT_SET(RELAY_SET_GPIO, RELAY_OFF);
+				GPIO_OUTPUT_SET(RELAY_CLEAR_GPIO, RELAY_OFF);
+				lrState = LR_IDLE;
+				break;	
+		
+			default:
+				util_assert(FALSE, "Bad latching relay state reached: %d", lrState);
+			}
+	}
+	#endif // End LATCHING
+	
+	#ifdef WITH_LED
+	
+	switch(lcState){
+		static uint8_t flashCount;
+			
+		case LC_OFF:
+			flashCount = 0;
+			GPIO_OUTPUT_SET(LED_GPIO, LED_OFF);
+			break;
+			
+		case LC_ON:
+			flashCount = 0;
+			GPIO_OUTPUT_SET(LED_GPIO, LED_ON);
+			break;
+				
+		case LC_FLASH:
+			if(flashCount)
+				flashCount--;
+			else{
+				GPIO_OUTPUT_SET(LED_GPIO, LED_OFF);
+				flashCount = LED_FLASH_COUNT;
+				lcState = LC_FLASH_OFF;
+			}
+			break;
+			
+		case LC_FLASH_OFF:
+			if(flashCount)
+				flashCount--;
+			else{
+				GPIO_OUTPUT_SET(LED_GPIO, LED_ON);
+				flashCount = LED_FLASH_COUNT;
+				lcState = LC_FLASH;
+			}
+			break;		
+			
+		default:
+			util_assert(FALSE, "Bad LED control state reached: %d", lcState);
+			break;
+		}
+	#endif	// End WITH_LED
 }
 
-/*
+/**
  * User initialization
  */
 
@@ -472,6 +581,26 @@ LOCAL void ICACHE_FLASH_ATTR relayInit(void)
 	easygpio_pinMode(BUTTON_GPIO, EASYGPIO_PULLUP, EASYGPIO_INPUT);
 	
 	#endif // End standard init
+	
+	#if LATCHING==MODE // Latching Init
+	// Initialize relay GPIO as an output
+	easygpio_pinMode(RELAY_SET_GPIO, EASYGPIO_NOPULL, EASYGPIO_OUTPUT);
+	easygpio_pinMode(RELAY_CLEAR_GPIO, EASYGPIO_NOPULL, EASYGPIO_OUTPUT);
+	
+	// Initialize output state
+	GPIO_OUTPUT_SET(RELAY_SET_GPIO, RELAY_OFF);
+	GPIO_OUTPUT_SET(RELAY_CLEAR_GPIO, RELAY_OFF);
+	
+	// Initialize button GPIO input
+	easygpio_pinMode(BUTTON_GPIO, EASYGPIO_PULLUP, EASYGPIO_INPUT);
+	#endif
+	
+	// LED output setup
+	#ifdef WITH_LED
+	easygpio_pinMode(LED_GPIO, EASYGPIO_NOPULL, EASYGPIO_OUTPUT);
+	GPIO_OUTPUT_SET(LED_GPIO, LED_OFF);
+	#endif
+	
 	
 	// Uart init
 	uart0_init(BIT_RATE_115200);
@@ -523,10 +652,10 @@ LOCAL void ICACHE_FLASH_ATTR relayInit(void)
 	
 
 	// Timers
-	os_timer_disarm(&pulse_timer);
-	os_timer_setfn(&pulse_timer, (os_timer_func_t *)pulseTmerExpireCb, (void *)0);
-	os_timer_disarm(&button_timer);
-	os_timer_setfn(&button_timer, (os_timer_func_t *)buttonTimerCb, (void *)0);
+	os_timer_disarm(&pulseTimer);
+	os_timer_setfn(&pulseTimer, (os_timer_func_t *)pulseTmerExpireCb, (void *)0);
+	os_timer_disarm(&buttonTimer);
+	os_timer_setfn(&buttonTimer, (os_timer_func_t *)nodeTimerCb, (void *)0);
 
 	// Attempt WIFI connection
 	
@@ -540,9 +669,9 @@ LOCAL void ICACHE_FLASH_ATTR relayInit(void)
 	// Attempt to connect to AP
 	WIFI_Connect(ssid, wifipass, wifiConnectCb);
 	
-	// Sample button every 100 mSec
+	// Timer to execute code every 100 mSec
 	
-	os_timer_arm(&button_timer, 100, 1);
+	os_timer_arm(&buttonTimer, 100, 1);
 	
 	// Free working buffer
 	util_free(buf);
@@ -551,7 +680,7 @@ LOCAL void ICACHE_FLASH_ATTR relayInit(void)
 
 }
 
-/*
+/**
  * Called from startup
  */
  
