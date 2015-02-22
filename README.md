@@ -1,11 +1,12 @@
 **esp_8266_MQTT_io_node**
 ==========
-This is an implementation of an MQTT Relay Node which runs natively on an ESP8266 ESP-03 module or other variant with GPIO12 support.
+This is an implementation of an MQTT Relay Node which runs natively on an ESP8266 ESP-03 module or other variant with enough free GPIO's.
 Code is compiled using the toolchain referenced below.
 
 **Features:**
 
-Provides one relay channel on GPIO12 and one button channel on GPIO0. Button channel can be linked to the relay for local control or isolated for separate use.
+Provides one relay channel on one GPIO or one bistable latching relay channel using 2 GPIO's and one button channel. The button channel can be linked to the relay for local control or isolated for separate use.
+A GPIO can optionally be reserved for a connection state LED. GPIO ports are configurable in the source code. 
 
 **Commands**
 
@@ -54,13 +55,13 @@ Where $device is the configured device path.
 
 Status messages which can be published:
 
-* BUTTONSTATE:DEPRESSED
-* BUTTONSTATE:RELEASED
-* RELAYSTATE:ON
-* RELAYSTATE:OFF
+* buttonstate:depressed
+* buttonstate:released
+* relaystate:on
+* relaystate:off
 
 WIFI Survey Data in the following format:
-AP: $AP, CHAN: $CHAN, RSSI: $RSSI
+ap: $AP, chan: $CHAN, rssi: $RSSI
 
 Can be multiple lines. One entry per line. 
 
@@ -69,17 +70,16 @@ Can be multiple lines. One entry per line.
 NB: WIFI and MQTT Configration is not stored in the source files. It is patched in using a custom Python utility which is available on my github account as
 a separate project:
 
-
 https://github.com/hwstar/ESP8266-MQTT-config-patcher
 
 Post patching allows the configuration to be changed without having sensitive information in the source files.
 
 **Electrical Details**
 
-The code is configured to be used with an ESP module which has GPIO12. It can be reconfigured, but use of GPIO2 is problematic as that pin needs to be
+The code is configured to be used with an ESP module with 1 uncommitted I/O for standard mode and 2 GPIO's for bistable latching mode. GPIO12 is the default. It can be reconfigured, but use of GPIO2 is problematic as that pin needs to be
 high during boot, and that makes the electrical interface more complex.
 
-The output of GPIO12 is low true to be compatible with the bootloader's initial pin states. 
+The relay GPIO outputs are low true to be compatible with the bootloader's initial pin states. 
 (This prevents the relay from pulsing at power on).
 
 **Toolchain**
