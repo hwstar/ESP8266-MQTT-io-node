@@ -39,16 +39,17 @@
 * POSSIBILITY OF SUCH DAMAGE.
 */
 
+// API includes
 #include "ets_sys.h"
-#include "driver/uart.h"
 #include "osapi.h"
-#include "mqtt.h"
-#include "wifi.h"
 #include "debug.h"
 #include "gpio.h"
 #include "user_interface.h"
 #include "mem.h"
-
+// Project includes
+#include "driver/uart.h"
+#include "mqtt.h"
+#include "wifi.h"
 #include "easygpio.h"
 #include "util.h"
 #include "kvstore.h"
@@ -58,57 +59,66 @@
 #define STANDARD 0		// Single output
 #define LATCHING 1		// Pulsed dual output (latching relay use)
 
-// Operational mode
-
-#ifndef MODE
-#define MODE STANDARD	// Set standard mode of operation
+#ifndef MODE			// In initially udefined,
+#define MODE STANDARD	// Set  mode of operation
+						// either STANDARD OR LATCHING
 #endif
 
-#ifndef WITH_LED
-#define WITH_LED		// Include LED code
-#endif
+// Include connection state LED code if defined
+
+//#define WITH_LED		
 
 
 #if STANDARD==MODE // GPIO setup for standard
 
-#define RELAY_GPIO 12 
+#define RELAY_GPIO 12				// GPIO for relay control output
 
-#define BUTTON_GPIO 0
+#define BUTTON_GPIO 0				// GPIO to use for button
 
-#define LED_GPIO 14
+#define LED_GPIO 14					// GPIO to use for LED
+
+#define RELAY_ON 0		// Low true relay outputs
+#define RELAY_OFF 1
+
 
 #endif // End standard setup
 
 #if LATCHING==MODE // Gpio setup for latching
 
-#define RELAY_SET_GPIO 13
-#define RELAY_CLEAR_GPIO 12
+#define RELAY_SET_GPIO 13			// GPIO for set coil on bistable relay
+#define RELAY_CLEAR_GPIO 12			// GPIO for clear coil on bistable relay
 
-#define BUTTON_GPIO 0
+#define BUTTON_GPIO 0				// GPIO to use for button
 
-#define LED_GPIO 14
+#define LED_GPIO 14					// GPIO to use for LED
+
+#define RELAY_ON 0		// Low true relay outputs
+#define RELAY_OFF 1
 
 
 #endif // End latching setup
 
+
+#ifdef WITH_LED // LED configuration
+
+#define LED_ON 0		// Low true LED output
+#define LED_OFF 1
+
+#define LED_FLASH_COUNT 2 // 400mSec LED flash period (n*100)*2
+
+#endif // End WITH_LED
 
 /* General definitions */
 
 #define ON 1
 #define OFF 0
 
-#define RELAY_ON 0
-#define RELAY_OFF 1
+#define MAX_INFO_ELEMENTS 16			// Patcher number of elements
+#define INFO_BLOCK_MAGIC 0x3F2A6C17		// Patcher magic
+#define INFO_BLOCK_SIG "ESP8266HWSTARSR"// Patcher pattern
+#define CONFIG_FLD_REQD 0x01			// Patcher field required flag
 
-#define LED_ON 0
-#define LED_OFF 1
-
-#define LED_FLASH_COUNT 2
-
-#define MAX_INFO_ELEMENTS 16
-#define INFO_BLOCK_MAGIC 0x3F2A6C17
-#define INFO_BLOCK_SIG "ESP8266HWSTARSR"
-#define CONFIG_FLD_REQD 0x01
+// Definition for a patcher config element
 
 struct config_info_element_tag{
 	uint8_t flags;
@@ -117,6 +127,8 @@ struct config_info_element_tag{
 }  __attribute__((__packed__));
 
 typedef struct config_info_element_tag config_info_element;
+
+// Definition for a patcher config element
 
 struct config_info_block_tag{
 	uint8_t signature[16];
@@ -127,12 +139,15 @@ struct config_info_block_tag{
 	config_info_element e[MAX_INFO_ELEMENTS];
 }  __attribute__((__packed__));
 
+// Definition of a common element for MQTT command parameters
 
 typedef union {
 	char str[16];
 	unsigned u;
 	int i;
 } pu;
+
+// Definition of an MQTT command element
 
 typedef struct {
 	const char *command;
@@ -143,11 +158,14 @@ typedef struct {
 
 typedef struct config_info_block_tag config_info_block;
 
+// Definition of command codes and types
 enum {WIFISSID=0, WIFIPASS, MQTTHOST, MQTTPORT, MQTTSECUR, MQTTDEVID, MQTTCLNT, MQTTPASS, MQTTKPALIV, MQTTDEVPATH, MQTTBTLOCAL};
 enum {CP_NONE= 0, CP_INT, CP_BOOL};
-
  
-/* Configuration block */
+/* Local storage */
+
+// Patcher configuration information
+
 
 LOCAL config_info_block configInfoBlock = {
 	.signature = INFO_BLOCK_SIG,
@@ -167,7 +185,8 @@ LOCAL config_info_block configInfoBlock = {
 	.e[MQTTBTLOCAL] = {.key = "MQTTBTLOCAL", .value = "1"} // Optional local toggle control using GPIO0
 };
 
-/* Command elements */
+// Command elements 
+// Additional commands are added here
  
 enum {CMD_OFF = 0, CMD_ON, CMD_TOGGLE, CMD_PULSE, CMD_MQTTBTLOCAL, CMD_QUERY, CMD_SURVEY};
 
@@ -182,7 +201,7 @@ LOCAL command_element commandElements[] = {
 	{.command = ""} /* End marker */
 };
 	
-
+// Misc Local variables 
 
 LOCAL int relayState = OFF;
 
@@ -201,10 +220,10 @@ LOCAL char *commandTopic, *statusTopic;
 LOCAL flash_handle_s *configHandle;
 LOCAL os_timer_t pulseTimer, buttonTimer;
 
-MQTT_Client mqttClient;
+MQTT_Client mqttClient;			// Control block used by MQTT functions
 
 /**
- * Send relay state update message
+ * Send MQTT message to update relay state
  */
  
 LOCAL void ICACHE_FLASH_ATTR updateRelayState(int s)
@@ -218,27 +237,24 @@ LOCAL void ICACHE_FLASH_ATTR updateRelayState(int s)
 
 }
 
-
 /**
  * Set new relay state
  */
  
 LOCAL void ICACHE_FLASH_ATTR relaySet(bool new_state)
 {
-	relayState = new_state;
+	relayState = new_state; // Save new state
 	#if STANDARD==MODE
-	GPIO_OUTPUT_SET(RELAY_GPIO, ((relayState) ? RELAY_ON : RELAY_OFF));
+	GPIO_OUTPUT_SET(RELAY_GPIO, ((relayState) ? RELAY_ON : RELAY_OFF)); // Set relay GPIO
 	#endif
 	#if LATCHING==MODE
 		if(!lrState)
-			lrState = (new_state) ? LR_SET : LR_CLEAR;
+			lrState = (new_state) ? LR_SET : LR_CLEAR; // Get new latching relay state
 		else
 			INFO("Overlapped latching relay commands not supported yet. Command ignored while busy\r\n");
 	#endif	
-	updateRelayState(relayState);
+	updateRelayState(relayState); // Send MQTT message indicating new state
 }
-	
-
 
 /**
  * Toggle the relay output
@@ -276,13 +292,13 @@ LOCAL void ICACHE_FLASH_ATTR wifiConnectCb(uint8_t status)
 {
 	if(status == STATION_GOT_IP){
 		#ifdef WITH_LED
-		lcState = LC_FLASH;
+		lcState = LC_FLASH; // Start flashing LED
 		#endif
 		MQTT_Connect(&mqttClient);
 	}
 	#ifdef WITH_LED
 	else
-		lcState = LC_OFF;
+		lcState = LC_OFF; // LED off
 	#endif
 	
 }
@@ -307,7 +323,7 @@ surveyCompleteCb(void *arg, STATUS status)
 		for(i = 2; (bss); i++){
 			os_sprintf(strlen(buf)+ buf, "ap: %s, chan: %d, rssi: %d\r\n", bss->ssid, bss->channel, bss->rssi);
 			bss = bss->next.stqe_next;
-			buf = util_str_realloc(buf, i * SURVEY_CHUNK_SIZE);
+			buf = util_str_realloc(buf, i * SURVEY_CHUNK_SIZE); // Grow buffer
 		}
 		INFO("Survey Results:\r\n", buf);
 		INFO(buf);
@@ -331,7 +347,7 @@ LOCAL void ICACHE_FLASH_ATTR mqttConnectedCb(uint32_t *args)
 	
 	INFO("MQTT: Connected\r\n");
 	#ifdef WITH_LED
-	lcState = LC_ON;
+	lcState = LC_ON; // LED on solid
 	#endif
 	
 	// Publish who we are and where we live
@@ -382,22 +398,26 @@ LOCAL void ICACHE_FLASH_ATTR mqttPublishedCb(uint32_t *args)
 
 /**
  * MQTT Data call back
+ * Commands are decoded and acted upon here
  */
 
-LOCAL void ICACHE_FLASH_ATTR mqttDataCb(uint32_t *args, const char* topic, uint32_t topic_len, const char *data, uint32_t data_len)
+LOCAL void ICACHE_FLASH_ATTR 
+mqttDataCb(uint32_t *args, const char* topic, uint32_t topic_len, 
+const char *data, uint32_t data_len)
 {
 	char *topicBuf, *dataBuf;
 	uint8_t i;
 
-	MQTT_Client* client = (MQTT_Client*)args;
+	MQTT_Client* client = (MQTT_Client*)args; // Pointer to MQTT control block passed in as args
 
+	// Save local copies of the topic and data
 	topicBuf = util_strndup(topic, topic_len);
 	dataBuf = util_strndup(data, data_len);
 	
 	INFO("Receive topic: %s, data: %s \r\n", topicBuf, dataBuf);
 	
 	
-	if (!os_strcmp(topicBuf, commandTopic)){
+	if (!os_strcmp(topicBuf, commandTopic)){ // Check for match to command topic
 		// Decode command
 		for(i = 0; commandElements[i].command[0]; i++){
 			command_element *ce = &commandElements[i];
@@ -427,7 +447,7 @@ LOCAL void ICACHE_FLASH_ATTR mqttDataCb(uint32_t *args, const char* topic, uint3
 							break;
 							
 						default:
-							util_assert(0, "Unsupported command: %d", i);
+							util_assert(FALSE, "Unsupported command: %d", i);
 					}
 					break;
 				}
@@ -453,12 +473,15 @@ LOCAL void ICACHE_FLASH_ATTR mqttDataCb(uint32_t *args, const char* topic, uint3
 		} /* END for */
 	} /* END if topic test */
 				
+	// Free local copies of the topic and data strings
 	util_free(topicBuf);
 	util_free(dataBuf);
 }
 
 /**
- * Pulse timer callback function
+ * Pulse timer callback function. This is used to time
+ * the length of the relay on state after a pulse:n command
+ * is received.
  */
  
 LOCAL void ICACHE_FLASH_ATTR pulseTmerExpireCb(void *arg)
@@ -469,6 +492,8 @@ LOCAL void ICACHE_FLASH_ATTR pulseTmerExpireCb(void *arg)
 
 /**
  * 100 millisecond timer callback
+ * This function handles button sampling, 
+ * latching relay control, and LED control
  */
  
 LOCAL void ICACHE_FLASH_ATTR nodeTimerCb(void *arg)
@@ -561,10 +586,11 @@ LOCAL void ICACHE_FLASH_ATTR nodeTimerCb(void *arg)
 }
 
 /**
- * User initialization
+ * System initialization
+ * Called once from user_init
  */
 
-LOCAL void ICACHE_FLASH_ATTR relayInit(void)
+LOCAL void ICACHE_FLASH_ATTR sysInit(void)
 {
 	char *buf = util_zalloc(256); // Working buffer
 	
@@ -593,13 +619,13 @@ LOCAL void ICACHE_FLASH_ATTR relayInit(void)
 	
 	// Initialize button GPIO input
 	easygpio_pinMode(BUTTON_GPIO, EASYGPIO_PULLUP, EASYGPIO_INPUT);
-	#endif
+	#endif  // End Latching Init
 	
 	// LED output setup
 	#ifdef WITH_LED
 	easygpio_pinMode(LED_GPIO, EASYGPIO_NOPULL, EASYGPIO_OUTPUT);
 	GPIO_OUTPUT_SET(LED_GPIO, LED_OFF);
-	#endif
+	#endif // End LED setup
 	
 	
 	// Uart init
@@ -649,6 +675,8 @@ LOCAL void ICACHE_FLASH_ATTR relayInit(void)
 	// Subtopics
 	commandTopic = util_make_sub_topic(configInfoBlock.e[MQTTDEVPATH].value, "command");
 	statusTopic = util_make_sub_topic(configInfoBlock.e[MQTTDEVPATH].value, "status");
+	INFO("Command subtopic: %s\r\n", commandTopic);
+	INFO("Status subtopic: %s\r\n", statusTopic);
 	
 
 	// Timers
@@ -663,8 +691,6 @@ LOCAL void ICACHE_FLASH_ATTR relayInit(void)
 	char *wifipass = configInfoBlock.e[WIFIPASS].value;
 	
 	INFO("Attempting connection with: %s\r\n", ssid);
-	INFO("Command subtopic: %s\r\n", commandTopic);
-	INFO("Status subtopic: %s\r\n", statusTopic);
 	
 	// Attempt to connect to AP
 	WIFI_Connect(ssid, wifipass, wifiConnectCb);
@@ -686,6 +712,6 @@ LOCAL void ICACHE_FLASH_ATTR relayInit(void)
  
 void user_init(void)
 {
-	relayInit();
+	sysInit();
 }
 
