@@ -142,7 +142,7 @@ struct config_info_block_tag{
 // Definition of a common element for MQTT command parameters
 
 typedef union {
-	char str[16];
+	char *sp;
 	unsigned u;
 	int i;
 } pu;
@@ -160,7 +160,7 @@ typedef struct config_info_block_tag config_info_block;
 
 // Definition of command codes and types
 enum {WIFISSID=0, WIFIPASS, MQTTHOST, MQTTPORT, MQTTSECUR, MQTTDEVID, MQTTCLNT, MQTTPASS, MQTTKPALIV, MQTTDEVPATH, MQTTBTLOCAL};
-enum {CP_NONE= 0, CP_INT, CP_BOOL};
+enum {CP_NONE= 0, CP_INT, CP_BOOL, CP_QSTRING};
  
 /* Local storage */
 
@@ -188,16 +188,18 @@ LOCAL config_info_block configInfoBlock = {
 // Command elements 
 // Additional commands are added here
  
-enum {CMD_OFF = 0, CMD_ON, CMD_TOGGLE, CMD_PULSE, CMD_MQTTBTLOCAL, CMD_QUERY, CMD_SURVEY};
+enum {CMD_OFF = 0, CMD_ON, CMD_TOGGLE, CMD_PULSE, CMD_BTLOCAL, CMD_QUERY, CMD_SURVEY, CMD_SSID, CMD_RESTART};
 
 LOCAL command_element commandElements[] = {
-	{.command = "OFF", .type = CP_NONE},
-	{.command = "ON", .type = CP_NONE},
-	{.command = "TOGGLE", .type = CP_NONE},
-	{.command = "PULSE", .type = CP_INT},
-	{.command = "MQTTBTLOCAL", .type = CP_INT},
-	{.command = "QUERY", .type = CP_NONE},
-	{.command = "SURVEY", .type = CP_NONE},
+	{.command = "off", .type = CP_NONE},
+	{.command = "on", .type = CP_NONE},
+	{.command = "toggle", .type = CP_NONE},
+	{.command = "pulse", .type = CP_INT},
+	{.command = "btlocal", .type = CP_INT},
+	{.command = "query", .type = CP_NONE},
+	{.command = "survey", .type = CP_NONE},
+	{.command = "ssid", .type = CP_QSTRING},
+	{.command = "restart",.type = CP_NONE},
 	{.command = ""} /* End marker */
 };
 	
@@ -221,6 +223,33 @@ LOCAL flash_handle_s *configHandle;
 LOCAL os_timer_t pulseTimer, buttonTimer;
 
 MQTT_Client mqttClient;			// Control block used by MQTT functions
+
+/**
+ * Handle SSID command
+ */
+ 
+LOCAL void ICACHE_FLASH_ATTR handleSSIDCommand(char *new_value)
+{
+	char *ssid = commandElements[CMD_SSID].p.sp;
+	char *buf = util_zalloc(256);
+	
+	if(!new_value){
+		os_sprintf(buf, "ssid:%s", ssid);
+		INFO("SSID Query Result: %s\r\n", buf );
+		MQTT_Publish(&mqttClient, statusTopic, buf, os_strlen(buf), 0, 0);
+	}
+	else{
+		util_free(ssid); // Free old value
+		ssid = util_strdup(new_value); // Copy new value to new string
+		kvstore_put(configHandle, commandElements[CMD_SSID].command, ssid);
+	}
+
+	util_free(buf);
+
+}
+
+
+
 
 /**
  * Send MQTT message to update relay state
@@ -321,7 +350,7 @@ surveyCompleteCb(void *arg, STATUS status)
 		char *buf = util_zalloc(SURVEY_CHUNK_SIZE);
 		bss = bss->next.stqe_next; //ignore first
 		for(i = 2; (bss); i++){
-			os_sprintf(strlen(buf)+ buf, "ap: %s, chan: %d, rssi: %d\r\n", bss->ssid, bss->channel, bss->rssi);
+			os_sprintf(strlen(buf)+ buf, "ap:%s;chan:%d;rssi:%d\r\n", bss->ssid, bss->channel, bss->rssi);
 			bss = bss->next.stqe_next;
 			buf = util_str_realloc(buf, i * SURVEY_CHUNK_SIZE); // Grow buffer
 		}
@@ -352,12 +381,13 @@ LOCAL void ICACHE_FLASH_ATTR mqttConnectedCb(uint32_t *args)
 	
 	// Publish who we are and where we live
 	wifi_get_ip_info(STATION_IF, &ipConfig);
-	os_sprintf(buf, "connstate:online;device:%s;ip4:%d.%d.%d.%d;schema:hwstar.relaynode",
+	os_sprintf(buf, "connstate:online;device:%s;ip4:%d.%d.%d.%d;schema:hwstar.relaynode;ssid:%s",
 			configInfoBlock.e[MQTTDEVPATH].value,
 			*((uint8_t *) &ipConfig.ip.addr),
 			*((uint8_t *) &ipConfig.ip.addr + 1),
 			*((uint8_t *) &ipConfig.ip.addr + 2),
-			*((uint8_t *) &ipConfig.ip.addr + 3));
+			*((uint8_t *) &ipConfig.ip.addr + 3),
+			commandElements[CMD_SSID].p.sp);
 
 	INFO("MQTT Node info: %s\r\n", buf);
 
@@ -446,6 +476,10 @@ const char *data, uint32_t data_len)
 							wifi_station_scan(NULL, surveyCompleteCb);
 							break;
 							
+						case CMD_RESTART:
+							util_restart();
+							break;
+							
 						default:
 							util_assert(FALSE, "Unsupported command: %d", i);
 					}
@@ -460,7 +494,7 @@ const char *data, uint32_t data_len)
 						os_timer_arm(&pulseTimer, ce->p.i, 0);
 						break;
 					}
-					if(CMD_MQTTBTLOCAL == i){ /* option: local button toggles relay */
+					if(CMD_BTLOCAL == i){ /* option: local button toggles relay */
 						ce->p.i = (ce->p.i) ? 1: 0;
 						kvstore_update_number(configHandle, ce->command, ce->p.i);
 						break;
@@ -469,8 +503,18 @@ const char *data, uint32_t data_len)
 					
 				}
 							
-			}		
+			}
+			if(CP_QSTRING == ce->type){ // Query strings
+				char *val;
+				if(util_parse_command_qstring(dataBuf, ce->command,  &val)){
+					if(CMD_SSID == i){ // SSID ?
+						handleSSIDCommand(val);
+					}
+				}
+			}
+			
 		} /* END for */
+		kvstore_flush(configHandle); // Flush any changes back to the kvs
 	} /* END if topic test */
 				
 	// Free local copies of the topic and data strings
@@ -504,7 +548,7 @@ LOCAL void ICACHE_FLASH_ATTR nodeTimerCb(void *arg)
 		if(newstate){
 			char result[32];
 			
-			if(commandElements[CMD_MQTTBTLOCAL].p.i) // If local control enabled
+			if(commandElements[CMD_BTLOCAL].p.i) // If local control enabled
 				relayToggle(); // Toggle the relay state
 			INFO("Button released\r\n");
 		}
@@ -592,6 +636,9 @@ LOCAL void ICACHE_FLASH_ATTR nodeTimerCb(void *arg)
 
 LOCAL void ICACHE_FLASH_ATTR sysInit(void)
 {
+
+	const char *ssidKey = commandElements[CMD_SSID].command;
+	const char *btLocalKey = commandElements[CMD_BTLOCAL].command;
 	char *buf = util_zalloc(256); // Working buffer
 	
 	// I/O initialization
@@ -637,14 +684,22 @@ LOCAL void ICACHE_FLASH_ATTR sysInit(void)
 	// Read in the config sector from flash
 	configHandle = kvstore_open(KVS_DEFAULT_LOC);
 	
+
 	// Check for default configuration overrides
-	if(!kvstore_exists(configHandle, commandElements[CMD_MQTTBTLOCAL].command)){
-		kvstore_put(configHandle, commandElements[CMD_MQTTBTLOCAL].command, configInfoBlock.e[CMD_MQTTBTLOCAL].value);
+	if(!kvstore_exists(configHandle, btLocalKey)){ // button local
+		kvstore_put(configHandle, btLocalKey, configInfoBlock.e[MQTTBTLOCAL].value);
 	}
+	
+	if(!kvstore_exists(configHandle, ssidKey)){ // ssid
+		kvstore_put(configHandle, ssidKey, configInfoBlock.e[WIFISSID].value);
+	}
+
 
 	// Get the configurations we need from the KVS
 	
-	kvstore_get_integer(configHandle,  commandElements[CMD_MQTTBTLOCAL].command, &commandElements[CMD_MQTTBTLOCAL].p.i);
+	kvstore_get_integer(configHandle, btLocalKey, &commandElements[CMD_BTLOCAL].p.i); // Retrieve button local
+	
+	commandElements[CMD_SSID].p.sp = kvstore_get_string(configHandle, ssidKey); // Retrieve SSID
 
 	// Write the KVS back out to flash	
 	
@@ -687,8 +742,8 @@ LOCAL void ICACHE_FLASH_ATTR sysInit(void)
 
 	// Attempt WIFI connection
 	
-	char *ssid = configInfoBlock.e[WIFISSID].value;
 	char *wifipass = configInfoBlock.e[WIFIPASS].value;
+	char *ssid = commandElements[CMD_SSID].p.sp;
 	
 	INFO("Attempting connection with: %s\r\n", ssid);
 	
@@ -698,6 +753,10 @@ LOCAL void ICACHE_FLASH_ATTR sysInit(void)
 	// Timer to execute code every 100 mSec
 	
 	os_timer_arm(&buttonTimer, 100, 1);
+	
+	#if LATCHING==MODE
+	lrState = LR_CLEAR; // Latching relay to off state 
+	#endif
 	
 	// Free working buffer
 	util_free(buf);

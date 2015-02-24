@@ -5,6 +5,17 @@
 #include "user_interface.h"
 #include "util.h"
 
+/*
+ * Restart system
+ */
+ 
+void ICACHE_FLASH_ATTR util_restart(void)
+{
+	os_printf("\r\nRestarting...\r\n");
+	ets_delay_us(250000);
+	system_restart();
+}
+
 
 /*
  * Assert error handler
@@ -13,9 +24,7 @@
 
 void ICACHE_FLASH_ATTR util_assert_handler(void)
 {	
-	os_printf("\r\n");
-	ets_delay_us(250000);
-	system_restart();
+	util_restart();
 }
 
 
@@ -156,6 +165,27 @@ bool ICACHE_FLASH_ATTR util_parse_command_int(const char *str, const char *comma
 	
 	*val = atoi(str + len + 1);
 	
+	return TRUE;
+}
+
+/*
+ * Parse a command with an optional string parameter
+ * Sets val to NULL if no parameter found, else returns a pointer to the
+ * value
+ */
+ 
+bool ICACHE_FLASH_ATTR util_parse_command_qstring(char *str, const char *command,  char **val)
+{
+	unsigned len = os_strlen(command);
+	
+	if(!util_match_stringi(str, command, os_strlen(command)))
+		return FALSE;
+	if ((!str[len]) || (str[len] != ':') || (!str[len + 1])){
+		*val = NULL;
+		return TRUE;
+	}
+	
+	*val = str + len + 1;
 	return TRUE;
 }
 

@@ -20,7 +20,14 @@ MQTT commands supported:
 |TOGGLE	| Toggles relay state|
 |QUERY	| Returns relay state|
 |SURVEY	| Returns WIFI survey information as seen by the node|
-|MQTTBTLOCAL:n| 1 = link button to relay toggle, 0 = keep button separate|
+|BTLOCAL:n| 1 = link button to relay toggle, 0 = keep button separate|
+|SSID:n| Query or set SSID|
+|RESTART| Restart system|
+
+Notes:
+
+* Sending an SSID command without a parameter will return the current SSID
+* SSID:n change not effective until next system restart
 
 **Power on Message**
 
@@ -38,7 +45,7 @@ The schema may be used to design a database of supported commands for each devic
 
 Here is an example:
 
-connstate:online;device:/home/lab/relay;ip4:127.0.0.1;schema:hwstar.relaynode
+connstate:online;device:/home/lab/relay;ip4:127.0.0.1;schema:hwstar.relaynode;ssid:yourssid
 
 The device path encompasses subtopics command and status. Commands are sent to $device/command (which the nodes subscribes to.) Status messages are
 published by the node on $device/status. The device path is set using the Configuration procedure described below.
@@ -61,7 +68,7 @@ Status messages which can be published:
 * relaystate:off
 
 WIFI Survey Data in the following format:
-ap: $AP, chan: $CHAN, rssi: $RSSI
+ap:$AP;chan:$CHAN;rssi:$RSSI
 
 Can be multiple lines. One entry per line. 
 
