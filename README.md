@@ -8,6 +8,11 @@ Code is compiled using the toolchain referenced below.
 Provides one relay channel on one GPIO or one bistable latching relay channel using 2 GPIO's and one button channel. The button channel can be linked to the relay for local control or isolated for separate use.
 A GPIO can optionally be reserved for a connection state LED. GPIO ports are configurable in the source code. 
 
+**Device Path**
+
+The device path encompasses subtopics command and status. Commands are sent to $devicepath/command (which the nodes subscribes to.) All status messages are
+published by the node on $devicepath/status except for power on message which is published on /node/info. the The device path is set using the patching procedure described later.
+
 **Commands**
 
 MQTT commands supported:
@@ -30,6 +35,16 @@ Notes:
 * Sending an SSID, or WIFIPASS command without a parameter will return the current value
 * SSID:n, WIFIPASS:n change not effective until next system restart
 
+**Status Messages**
+
+Status messages which can be published:
+
+* buttonstate:depressed
+* buttonstate:released
+* relaystate:on
+* relaystate:off
+* WIFI survey data in the following format: ap:$AP;chan:$CHAN;rssi:$RSSI. Can be multiple lines. One entry per line. 
+
 **Power on Message**
 
 After booting, the node posts a message to /node/info with the following data:
@@ -49,9 +64,6 @@ Here is an example:
 
 connstate:online;device:/home/lab/relay;ip4:127.0.0.1;schema:hwstar.relaynode;ssid:yourssid
 
-The device path encompasses subtopics command and status. Commands are sent to $device/command (which the nodes subscribes to.) Status messages are
-published by the node on $device/status. The device path is set using the Configuration procedure described below.
-
 **Last Will and Testament**
 
 The following will be published to /node/info if the node is not heard from by the MQTT broker:
@@ -59,20 +71,6 @@ The following will be published to /node/info if the node is not heard from by t
 connstate:offline;device:$device
 
 Where $device is the configured device path.
-
-**Status Messages**
-
-Status messages which can be published:
-
-* buttonstate:depressed
-* buttonstate:released
-* relaystate:on
-* relaystate:off
-
-WIFI Survey Data in the following format:
-ap:$AP;chan:$CHAN;rssi:$RSSI
-
-Can be multiple lines. One entry per line. 
 
 **Configuration Patcher**
 
