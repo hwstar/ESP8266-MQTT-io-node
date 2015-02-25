@@ -23,11 +23,12 @@ MQTT commands supported:
 |BTLOCAL:n| 1 = link button to relay toggle, 0 = keep button separate|
 |SSID:n| Query or set SSID|
 |RESTART| Restart system|
+|WIFIPASS:n| Query or set WIFI Password|
 
 Notes:
 
-* Sending an SSID command without a parameter will return the current SSID
-* SSID:n change not effective until next system restart
+* Sending an SSID, or WIFIPASS command without a parameter will return the current value
+* SSID:n, WIFIPASS:n change not effective until next system restart
 
 **Power on Message**
 

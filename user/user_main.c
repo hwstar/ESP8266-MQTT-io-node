@@ -188,7 +188,7 @@ LOCAL config_info_block configInfoBlock = {
 // Command elements 
 // Additional commands are added here
  
-enum {CMD_OFF = 0, CMD_ON, CMD_TOGGLE, CMD_PULSE, CMD_BTLOCAL, CMD_QUERY, CMD_SURVEY, CMD_SSID, CMD_RESTART};
+enum {CMD_OFF = 0, CMD_ON, CMD_TOGGLE, CMD_PULSE, CMD_BTLOCAL, CMD_QUERY, CMD_SURVEY, CMD_SSID, CMD_RESTART, CMD_WIFIPASS};
 
 LOCAL command_element commandElements[] = {
 	{.command = "off", .type = CP_NONE},
@@ -200,6 +200,7 @@ LOCAL command_element commandElements[] = {
 	{.command = "survey", .type = CP_NONE},
 	{.command = "ssid", .type = CP_QSTRING},
 	{.command = "restart",.type = CP_NONE},
+	{.command = "wifipass",.type = CP_QSTRING},
 	{.command = ""} /* End marker */
 };
 	
@@ -225,31 +226,30 @@ LOCAL os_timer_t pulseTimer, buttonTimer;
 MQTT_Client mqttClient;			// Control block used by MQTT functions
 
 /**
- * Handle SSID command
+ * Handle qstring command
  */
  
-LOCAL void ICACHE_FLASH_ATTR handleSSIDCommand(char *new_value)
+LOCAL void ICACHE_FLASH_ATTR handleQstringCommand(char *new_value, command_element *ce)
 {
-	char *ssid = commandElements[CMD_SSID].p.sp;
-	char *buf = util_zalloc(256);
+	char *buf = util_zalloc(128);
+	
 	
 	if(!new_value){
-		os_sprintf(buf, "ssid:%s", ssid);
-		INFO("SSID Query Result: %s\r\n", buf );
+		const char *cur_value = kvstore_get_string(configHandle, ce->command);
+		os_sprintf(buf, "%s:%s", ce->command, cur_value);
+		util_free(cur_value);
+		INFO("Query Result: %s\r\n", buf );
 		MQTT_Publish(&mqttClient, statusTopic, buf, os_strlen(buf), 0, 0);
 	}
 	else{
-		util_free(ssid); // Free old value
-		ssid = util_strdup(new_value); // Copy new value to new string
-		kvstore_put(configHandle, commandElements[CMD_SSID].command, ssid);
+		util_free(ce->p.sp); // Free old value
+		ce->p.sp = util_strdup(new_value); // Copy new value to new string
+		kvstore_put(configHandle, ce->command, ce->p.sp);
 	}
 
 	util_free(buf);
 
 }
-
-
-
 
 /**
  * Send MQTT message to update relay state
@@ -507,8 +507,8 @@ const char *data, uint32_t data_len)
 			if(CP_QSTRING == ce->type){ // Query strings
 				char *val;
 				if(util_parse_command_qstring(dataBuf, ce->command,  &val)){
-					if(CMD_SSID == i){ // SSID ?
-						handleSSIDCommand(val);
+					if((CMD_SSID == i) || (CMD_WIFIPASS == i)){ // SSID or WIFIPASS?
+						handleQstringCommand(val, ce);
 					}
 				}
 			}
@@ -637,8 +637,6 @@ LOCAL void ICACHE_FLASH_ATTR nodeTimerCb(void *arg)
 LOCAL void ICACHE_FLASH_ATTR sysInit(void)
 {
 
-	const char *ssidKey = commandElements[CMD_SSID].command;
-	const char *btLocalKey = commandElements[CMD_BTLOCAL].command;
 	char *buf = util_zalloc(256); // Working buffer
 	
 	// I/O initialization
@@ -685,25 +683,29 @@ LOCAL void ICACHE_FLASH_ATTR sysInit(void)
 	configHandle = kvstore_open(KVS_DEFAULT_LOC);
 	
 
+	const char *ssidKey = commandElements[CMD_SSID].command;
+	const char *WIFIPassKey = commandElements[CMD_WIFIPASS].command;
+	const char *btLocalKey = commandElements[CMD_BTLOCAL].command;
+
 	// Check for default configuration overrides
-	if(!kvstore_exists(configHandle, btLocalKey)){ // button local
+	if(!kvstore_exists(configHandle, ssidKey)){ // if no ssid, assume the rest of the defaults need to be set as well
 		kvstore_put(configHandle, btLocalKey, configInfoBlock.e[MQTTBTLOCAL].value);
+		kvstore_put(configHandle, ssidKey, configInfoBlock.e[WIFISSID].value);
+		kvstore_put(configHandle, WIFIPassKey, configInfoBlock.e[WIFIPASS].value);
+
+		// Write the KVS back out to flash	
+	
+		kvstore_flush(configHandle);
 	}
 	
-	if(!kvstore_exists(configHandle, ssidKey)){ // ssid
-		kvstore_put(configHandle, ssidKey, configInfoBlock.e[WIFISSID].value);
-	}
-
-
-	// Get the configurations we need from the KVS
+	// Get the configurations we need from the KVS and store them in the commandElement data area
 	
 	kvstore_get_integer(configHandle, btLocalKey, &commandElements[CMD_BTLOCAL].p.i); // Retrieve button local
 	
 	commandElements[CMD_SSID].p.sp = kvstore_get_string(configHandle, ssidKey); // Retrieve SSID
-
-	// Write the KVS back out to flash	
 	
-	kvstore_flush(configHandle);
+	commandElements[CMD_WIFIPASS].p.sp = kvstore_get_string(configHandle, WIFIPassKey); // Retrieve WIFI Pass
+
 	
 	// Initialize MQTT connection 
 	
@@ -742,7 +744,7 @@ LOCAL void ICACHE_FLASH_ATTR sysInit(void)
 
 	// Attempt WIFI connection
 	
-	char *wifipass = configInfoBlock.e[WIFIPASS].value;
+	char *wifipass = commandElements[CMD_WIFIPASS].p.sp;
 	char *ssid = commandElements[CMD_SSID].p.sp;
 	
 	INFO("Attempting connection with: %s\r\n", ssid);
