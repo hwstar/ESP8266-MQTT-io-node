@@ -40,6 +40,7 @@ After booting, the node posts a message to /node/info with the following data:
 |DEVICE		| A device path (e.g. /home/lab/relay)|
 |IP ADDRESS	| The IP address assigned to the node|
 |SCHEMA		| A schema name of hwstar.relaynode (vendor.product ala xPL)|
+|SSID       | SSID utilized|
 
 
 The schema may be used to design a database of supported commands for each device.
