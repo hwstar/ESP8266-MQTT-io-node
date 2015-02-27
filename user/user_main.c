@@ -60,13 +60,13 @@
 #define LATCHING 1		// Pulsed dual output (latching relay use)
 
 #ifndef MODE			// In initially udefined,
-#define MODE LATCHING	// Set  mode of operation
+#define MODE STANDARD	// Set  mode of operation
 						// either STANDARD OR LATCHING
 #endif
 
 // Include connection state LED code if defined
 
-#define WITH_LED		
+//#define WITH_LED		
 
 
 #if STANDARD==MODE // GPIO setup for standard
