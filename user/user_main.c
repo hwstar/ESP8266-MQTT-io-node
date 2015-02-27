@@ -60,13 +60,13 @@
 #define LATCHING 1		// Pulsed dual output (latching relay use)
 
 #ifndef MODE			// In initially udefined,
-#define MODE STANDARD	// Set  mode of operation
+#define MODE LATCHING	// Set  mode of operation
 						// either STANDARD OR LATCHING
 #endif
 
 // Include connection state LED code if defined
 
-//#define WITH_LED		
+#define WITH_LED		
 
 
 #if STANDARD==MODE // GPIO setup for standard
@@ -188,7 +188,7 @@ LOCAL config_info_block configInfoBlock = {
 // Command elements 
 // Additional commands are added here
  
-enum {CMD_OFF = 0, CMD_ON, CMD_TOGGLE, CMD_PULSE, CMD_BTLOCAL, CMD_QUERY, CMD_SURVEY, CMD_SSID, CMD_RESTART, CMD_WIFIPASS};
+enum {CMD_OFF = 0, CMD_ON, CMD_TOGGLE, CMD_PULSE, CMD_BTLOCAL, CMD_QUERY, CMD_SURVEY, CMD_SSID, CMD_RESTART, CMD_WIFIPASS, CMD_CYCLE};
 
 LOCAL command_element commandElements[] = {
 	{.command = "off", .type = CP_NONE},
@@ -201,6 +201,7 @@ LOCAL command_element commandElements[] = {
 	{.command = "ssid", .type = CP_QSTRING},
 	{.command = "restart",.type = CP_NONE},
 	{.command = "wifipass",.type = CP_QSTRING},
+	{.command = "cycle",.type = CP_INT},
 	{.command = ""} /* End marker */
 };
 	
@@ -488,21 +489,33 @@ const char *data, uint32_t data_len)
 			}
 			
 			if((CP_INT == ce->type) || (CP_BOOL == ce->type)){ // Integer/bool parameter
-				if(util_parse_command_int(dataBuf, ce->command, &ce->p.i)){
-					if(CMD_PULSE == i){ /* Pulse relay */
-						relaySet(ON);
-						os_timer_arm(&pulseTimer, ce->p.i, 0);
-						break;
-					}
-					if(CMD_BTLOCAL == i){ /* option: local button toggles relay */
-						ce->p.i = (ce->p.i) ? 1: 0;
-						kvstore_update_number(configHandle, ce->command, ce->p.i);
-						break;
-						
-					}
-					
-				}
+				int arg;
+				if(util_parse_command_int(dataBuf, ce->command, &arg)){
+					switch(i){
+						case CMD_PULSE: // Pulse rely on then off for a specific time in mSec
+							relaySet(ON);
+							os_timer_arm(&pulseTimer, arg, 0);
+							break;
+			
+						case CMD_BTLOCAL: // Link or break button control from relay
+							ce->p.i = (arg) ? 1: 0;
+							kvstore_update_number(configHandle, ce->command, ce->p.i);
+							break;
 							
+						case CMD_CYCLE: // Cycle relay
+							if(arg && (arg < 500))
+								arg = 500; // Clip to 1/2 sec half cycle
+							arg = arg/100; // Convert 1ms to 100ms count
+							ce->p.i = arg;
+							if(!arg) // If paramter is 0, this is a request to stop cycling.
+								relaySet(OFF);
+							break;
+							
+						default:
+							util_assert(FALSE, "Unsupported command: %d", i);
+						}
+					break;
+				}				
 			}
 			if(CP_QSTRING == ce->type){ // Query strings
 				char *val;
@@ -543,6 +556,7 @@ LOCAL void ICACHE_FLASH_ATTR pulseTmerExpireCb(void *arg)
 LOCAL void ICACHE_FLASH_ATTR nodeTimerCb(void *arg)
 {
 	int newstate =  GPIO_INPUT_GET(BUTTON_GPIO);
+	static int relayCycleTimer;
 	
 	if(newstate != buttonState){
 		if(newstate){
@@ -626,7 +640,19 @@ LOCAL void ICACHE_FLASH_ATTR nodeTimerCb(void *arg)
 			util_assert(FALSE, "Bad LED control state reached: %d", lcState);
 			break;
 		}
+	
 	#endif	// End WITH_LED
+	
+	// For relay cycle
+	if(commandElements[CMD_CYCLE].p.i){
+		if(!relayCycleTimer){
+			relayCycleTimer = commandElements[CMD_CYCLE].p.i;
+			relayToggle();
+		}
+		else relayCycleTimer--;
+	}
+	else if(relayCycleTimer)
+		relayCycleTimer = 0;
 }
 
 /**

@@ -29,11 +29,13 @@ MQTT commands supported:
 |SSID:n| Query or set SSID|
 |RESTART| Restart system|
 |WIFIPASS:n| Query or set WIFI Password|
+|CYCLE:n| Start or stop relay cycling (flashing)
 
 Notes:
 
 * Sending an SSID, or WIFIPASS command without a parameter will return the current value
 * SSID:n, WIFIPASS:n change not effective until next system restart
+* CYCLE:n Where n is the time of a half cycle in milliseconds
 
 **Status Messages**
 
