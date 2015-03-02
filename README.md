@@ -64,7 +64,7 @@ After booting, the node posts a message to /node/info with the following data:
 |CONNSTATE  | Connection state (online)
 |DEVICE		| A device path (e.g. /home/lab/relay)|
 |IP ADDRESS	| The IP address assigned to the node|
-|SCHEMA		| A schema name of hwstar.relaynode (vendor.product ala xPL)|
+|SCHEMA		| A schema name of hwstar_relaynode (vendor_product)|
 |SSID       | SSID utilized|
 
 
@@ -72,7 +72,7 @@ The schema may be used to design a database of supported commands for each devic
 
 Here is an example:
 
-muster{connstate:online,device:/home/lab/relay,ip4:127.0.0.1,schema:hwstar.relaynode,ssid:yourssid}
+muster{connstate:online,device:/home/lab/relay,ip4:127.0.0.1,schema:hwstar_relaynode,ssid:yourssid}
 
 **Last Will and Testament**
 
