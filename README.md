@@ -18,7 +18,7 @@ published by the node on $devicepath/status except for the node configuration wh
 Control messages are received by all nodes on /node/control. These are meant to be used to interrogate the nodes connected to the network, 
 and perform other system-wide control functions.
 
-One control message is currently supported: *muster*. This directs the node to re-send the node configuration information to /node/info.
+One control message is currently supported: *muster*. This directs the node to re-send the node configuration information to /node/info. See the power on message below for further details
 
 
 **Command Messages**
