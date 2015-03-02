@@ -72,7 +72,7 @@ The schema may be used to design a database of supported commands for each devic
 
 Here is an example:
 
-connstate:online;device:/home/lab/relay;ip4:127.0.0.1;schema:hwstar.relaynode;ssid:yourssid
+muster{connstate:online,device:/home/lab/relay,ip4:127.0.0.1,schema:hwstar.relaynode,ssid:yourssid}
 
 **Last Will and Testament**
 

@@ -239,7 +239,7 @@ LOCAL void ICACHE_FLASH_ATTR publishConnInfo(MQTT_Client *client)
 		
 	// Publish who we are and where we live
 	wifi_get_ip_info(STATION_IF, &ipConfig);
-	os_sprintf(buf, "connstate:online;device:%s;ip4:%d.%d.%d.%d;schema:hwstar.relaynode;ssid:%s",
+	os_sprintf(buf, "muster{connstate:online,device:%s,ip4:%d.%d.%d.%d,schema:hwstar.relaynode,ssid:%s}",
 			configInfoBlock.e[MQTTDEVPATH].value,
 			*((uint8_t *) &ipConfig.ip.addr),
 			*((uint8_t *) &ipConfig.ip.addr + 1),
