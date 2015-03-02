@@ -250,7 +250,7 @@ LOCAL void ICACHE_FLASH_ATTR publishConnInfo(MQTT_Client *client)
 	INFO("MQTT Node info: %s\r\n", buf);
 
 	// Publish
-	MQTT_Publish(client, "/node/info", buf, os_strlen(buf), 0, 0);
+	MQTT_Publish(client, infoTopic, buf, os_strlen(buf), 0, 0);
 	
 	// Free the buffer
 	util_free(buf);

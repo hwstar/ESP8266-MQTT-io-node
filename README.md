@@ -11,7 +11,7 @@ A GPIO can optionally be reserved for a connection state LED. GPIO ports are con
 **Device Path**
 
 The device path encompasses subtopics command and status. Commands are sent to $devicepath/command (which the nodes subscribes to.) All status messages are
-published by the node on $devicepath/status except for the node configuration which is published on /node/info. the The device path is set using the patching procedure described later.
+published by the node on $devicepath/status except for the node configuration which is published on /node/info. The device path is set using the patching procedure described later.
 
 **Control Messages**
 
