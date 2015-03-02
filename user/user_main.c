@@ -66,7 +66,7 @@
 
 // Include connection state LED code if defined
 
-//#define WITH_LED		
+#define WITH_LED		
 
 
 #if STANDARD==MODE // GPIO setup for standard
@@ -221,10 +221,43 @@ LOCAL lcstatetype lcState;
 
 LOCAL int buttonState = 1;
 LOCAL char *commandTopic, *statusTopic;
+LOCAL char *controlTopic = "/node/control";
+LOCAL char *infoTopic = "/node/info";
 LOCAL flash_handle_s *configHandle;
 LOCAL os_timer_t pulseTimer, buttonTimer;
 
 MQTT_Client mqttClient;			// Control block used by MQTT functions
+
+
+/**
+ * Publish connection info
+ */
+LOCAL void ICACHE_FLASH_ATTR publishConnInfo(MQTT_Client *client)
+{
+	struct ip_info ipConfig;
+	char *buf = util_zalloc(256);	
+		
+	// Publish who we are and where we live
+	wifi_get_ip_info(STATION_IF, &ipConfig);
+	os_sprintf(buf, "connstate:online;device:%s;ip4:%d.%d.%d.%d;schema:hwstar.relaynode;ssid:%s",
+			configInfoBlock.e[MQTTDEVPATH].value,
+			*((uint8_t *) &ipConfig.ip.addr),
+			*((uint8_t *) &ipConfig.ip.addr + 1),
+			*((uint8_t *) &ipConfig.ip.addr + 2),
+			*((uint8_t *) &ipConfig.ip.addr + 3),
+			commandElements[CMD_SSID].p.sp);
+
+	INFO("MQTT Node info: %s\r\n", buf);
+
+	// Publish
+	MQTT_Publish(client, "/node/info", buf, os_strlen(buf), 0, 0);
+	
+	// Free the buffer
+	util_free(buf);
+	
+}
+
+
 
 /**
  * Handle qstring command
@@ -370,37 +403,25 @@ surveyCompleteCb(void *arg, STATUS status)
  
 LOCAL void ICACHE_FLASH_ATTR mqttConnectedCb(uint32_t *args)
 {
-	struct ip_info ipConfig;
+	
 	MQTT_Client* client = (MQTT_Client*)args;
-	char *buf = util_zalloc(256);	
+
 
 	
 	INFO("MQTT: Connected\r\n");
 	#ifdef WITH_LED
 	lcState = LC_ON; // LED on solid
 	#endif
-	
-	// Publish who we are and where we live
-	wifi_get_ip_info(STATION_IF, &ipConfig);
-	os_sprintf(buf, "connstate:online;device:%s;ip4:%d.%d.%d.%d;schema:hwstar.relaynode;ssid:%s",
-			configInfoBlock.e[MQTTDEVPATH].value,
-			*((uint8_t *) &ipConfig.ip.addr),
-			*((uint8_t *) &ipConfig.ip.addr + 1),
-			*((uint8_t *) &ipConfig.ip.addr + 2),
-			*((uint8_t *) &ipConfig.ip.addr + 3),
-			commandElements[CMD_SSID].p.sp);
 
-	INFO("MQTT Node info: %s\r\n", buf);
-
-	MQTT_Publish(client, "/node/info", buf, os_strlen(buf), 0, 0);
+	publishConnInfo(client);
 	
-	
+	// Subscribe to the control topic
+	MQTT_Subscribe(client, controlTopic, 0);
 	// Subscribe to command topic
 	MQTT_Subscribe(client, commandTopic, 0);
 	// Publish relay state
 	updateRelayState(relayState); 
-	// Free the buffer
-	util_free(buf);
+
 }
 
 /**
@@ -447,8 +468,15 @@ const char *data, uint32_t data_len)
 	
 	INFO("Receive topic: %s, data: %s \r\n", topicBuf, dataBuf);
 	
+	// Control Message?
+	if(!os_strcmp(topicBuf, controlTopic)){
+		if(util_match_stringi(dataBuf, "muster", 6)){
+			publishConnInfo(&mqttClient);
+		}
+	}
 	
-	if (!os_strcmp(topicBuf, commandTopic)){ // Check for match to command topic
+	// Command Message?
+	else if (!os_strcmp(topicBuf, commandTopic)){ // Check for match to command topic
 		// Decode command
 		for(i = 0; commandElements[i].command[0]; i++){
 			command_element *ce = &commandElements[i];
@@ -753,7 +781,7 @@ LOCAL void ICACHE_FLASH_ATTR sysInit(void)
 	// Last will and testament
 
 	os_sprintf(buf, "connstate:offline;device:%s", configInfoBlock.e[MQTTDEVPATH].value);
-	MQTT_InitLWT(&mqttClient, "/node/info", buf, 0, 0);
+	MQTT_InitLWT(&mqttClient, infoTopic, buf, 0, 0);
 
 	// Subtopics
 	commandTopic = util_make_sub_topic(configInfoBlock.e[MQTTDEVPATH].value, "command");

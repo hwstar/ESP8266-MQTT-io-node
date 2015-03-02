@@ -11,9 +11,17 @@ A GPIO can optionally be reserved for a connection state LED. GPIO ports are con
 **Device Path**
 
 The device path encompasses subtopics command and status. Commands are sent to $devicepath/command (which the nodes subscribes to.) All status messages are
-published by the node on $devicepath/status except for power on message which is published on /node/info. the The device path is set using the patching procedure described later.
+published by the node on $devicepath/status except for the node configuration which is published on /node/info. the The device path is set using the patching procedure described later.
 
-**Commands**
+**Control Messages**
+
+Control messages are received by all nodes on /node/control. These are meant to be used to interrogate the nodes connected to the network, 
+and perform other system-wide control functions.
+
+One control message is currently supported: *muster*. This directs the node to re-send the node configuration information to /node/info.
+
+
+**Command Messages**
 
 MQTT commands supported:
 
