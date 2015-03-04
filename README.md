@@ -78,7 +78,7 @@ muster{connstate:online,device:/home/lab/relay,ip4:127.0.0.1,schema:hwstar_relay
 
 The following will be published to /node/info if the node is not heard from by the MQTT broker:
 
-connstate:offline;device:$device
+muster{connstate:offline,device:$DEVICE}
 
 Where $device is the configured device path.
 

@@ -780,7 +780,7 @@ LOCAL void ICACHE_FLASH_ATTR sysInit(void)
 	
 	// Last will and testament
 
-	os_sprintf(buf, "connstate:offline;device:%s", configInfoBlock.e[MQTTDEVPATH].value);
+	os_sprintf(buf, "muster{connstate:offline,device:%s}", configInfoBlock.e[MQTTDEVPATH].value);
 	MQTT_InitLWT(&mqttClient, infoTopic, buf, 0, 0);
 
 	// Subtopics
