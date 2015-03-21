@@ -159,7 +159,7 @@ typedef struct {
 typedef struct config_info_block_tag config_info_block;
 
 // Definition of command codes and types
-enum {WIFISSID=0, WIFIPASS, MQTTHOST, MQTTPORT, MQTTSECUR, MQTTDEVID, MQTTCLNT, MQTTPASS, MQTTKPALIV, MQTTDEVPATH, MQTTBTLOCAL};
+enum {WIFISSID=0, WIFIPASS, MQTTHOST, MQTTPORT, MQTTSECUR, MQTTDEVID, MQTTUSER, MQTTPASS, MQTTKPALIV, MQTTDEVPATH, MQTTBTLOCAL};
 enum {CP_NONE= 0, CP_INT, CP_BOOL, CP_QSTRING};
  
 /* Local storage */
@@ -178,7 +178,7 @@ LOCAL config_info_block configInfoBlock = {
 	.e[MQTTPORT] = {.key = "MQTTPORT", .value="1883"}, // destination Port for mqtt broker
 	.e[MQTTSECUR] = {.key = "MQTTSECUR",.value="0"}, // Security 0 - no encryption
 	.e[MQTTDEVID] = {.key = "MQTTDEVID", .value="your_mqtt_device_id_here"}, // Only relevant if MQTTSECUR is other than 0
-	.e[MQTTCLNT] = {.key = "MQTTCLNT", .value="your_mqtt_client_name_here"}, // Only relevant if MQTTSECUR is other than 0
+	.e[MQTTUSER] = {.key = "MQTTUSER", .value="your_mqtt_client_name_here"}, // Only relevant if MQTTSECUR is other than 0
 	.e[MQTTPASS] = {.key = "MQTTPASS", .value="its_a_secret"},// Only relevant if MQTTSECUR is other than 0
 	.e[MQTTKPALIV] = {.key = "MQTTKPALIV", .value="120"}, // Keepalive interval
 	.e[MQTTDEVPATH] = {.flags = CONFIG_FLD_REQD, .key = "MQTTDEVPATH", .value = "/home/lab/relay"}, // Device path
@@ -770,7 +770,7 @@ LOCAL void ICACHE_FLASH_ATTR sysInit(void)
 	(uint8_t) atoi(configInfoBlock.e[MQTTSECUR].value));
 
 	MQTT_InitClient(&mqttClient, configInfoBlock.e[MQTTDEVID].value, 
-	configInfoBlock.e[MQTTCLNT].value, configInfoBlock.e[MQTTPASS].value,
+	configInfoBlock.e[MQTTUSER].value, configInfoBlock.e[MQTTPASS].value,
 	atoi(configInfoBlock.e[MQTTKPALIV].value), 1);
 
 	MQTT_OnConnected(&mqttClient, mqttConnectedCb);
