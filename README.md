@@ -71,11 +71,11 @@ After booting, the node posts a JSON encoded message to /node/info with the foll
 
 |Field		| Description|
 |-----      | -----------|
-|CONNSTATE  | Connection state (online)
-|DEVICE		| A device path (e.g. /home/lab/relay)|
-|IP ADDRESS	| The IP address assigned to the node|
-|SCHEMA		| A schema name of hwstar_relaynode (vendor_product)|
-|SSID       | SSID utilized|
+|connstate  | Connection state (online)
+|device		| A device path (e.g. /home/lab/relay)|
+|ip4		| The IP address assigned to the node|
+|schema		| A schema name of hwstar_relaynode (vendor_product)|
+|ssid       | SSID utilized|
 
 
 The schema may be used to design a database of supported commands for each device.
