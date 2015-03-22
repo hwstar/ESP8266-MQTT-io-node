@@ -46,6 +46,7 @@
 #include "gpio.h"
 #include "user_interface.h"
 #include "mem.h"
+#include "jsonparse.h"
 // Project includes
 #include "driver/uart.h"
 #include "mqtt.h"
@@ -177,9 +178,9 @@ LOCAL config_info_block configInfoBlock = {
 	.e[MQTTHOST] = {.flags = CONFIG_FLD_REQD, .key = "MQTTHOST", .value="your_mqtt_broker_hostname_here"}, // May also be an IP address
 	.e[MQTTPORT] = {.key = "MQTTPORT", .value="1883"}, // destination Port for mqtt broker
 	.e[MQTTSECUR] = {.key = "MQTTSECUR",.value="0"}, // Security 0 - no encryption
-	.e[MQTTDEVID] = {.key = "MQTTDEVID", .value="your_mqtt_device_id_here"}, // Only relevant if MQTTSECUR is other than 0
-	.e[MQTTUSER] = {.key = "MQTTUSER", .value="your_mqtt_client_name_here"}, // Only relevant if MQTTSECUR is other than 0
-	.e[MQTTPASS] = {.key = "MQTTPASS", .value="its_a_secret"},// Only relevant if MQTTSECUR is other than 0
+	.e[MQTTDEVID] = {.key = "MQTTDEVID", .value="your_mqtt_device_id_here"}, // Unique device ID
+	.e[MQTTUSER] = {.key = "MQTTUSER", .value="your_mqtt_client_name_here"}, // MQTT User name
+	.e[MQTTPASS] = {.key = "MQTTPASS", .value="its_a_secret"},// MQTT Password
 	.e[MQTTKPALIV] = {.key = "MQTTKPALIV", .value="120"}, // Keepalive interval
 	.e[MQTTDEVPATH] = {.flags = CONFIG_FLD_REQD, .key = "MQTTDEVPATH", .value = "/home/lab/relay"}, // Device path
 	.e[MQTTBTLOCAL] = {.key = "MQTTBTLOCAL", .value = "1"} // Optional local toggle control using GPIO0
@@ -239,7 +240,7 @@ LOCAL void ICACHE_FLASH_ATTR publishConnInfo(MQTT_Client *client)
 		
 	// Publish who we are and where we live
 	wifi_get_ip_info(STATION_IF, &ipConfig);
-	os_sprintf(buf, "muster{connstate:online,device:%s,ip4:%d.%d.%d.%d,schema:hwstar_relaynode,ssid:%s}",
+	os_sprintf(buf, "{\"muster\":{\"connstate\":\"online\",\"device\":\"%s\",\"ip4\":\"%d.%d.%d.%d\",\"schema\":\"hwstar_relaynode\",\"ssid\":\"%s\"}}",
 			configInfoBlock.e[MQTTDEVPATH].value,
 			*((uint8_t *) &ipConfig.ip.addr),
 			*((uint8_t *) &ipConfig.ip.addr + 1),
@@ -270,15 +271,16 @@ LOCAL void ICACHE_FLASH_ATTR handleQstringCommand(char *new_value, command_eleme
 	
 	if(!new_value){
 		const char *cur_value = kvstore_get_string(configHandle, ce->command);
-		os_sprintf(buf, "%s:%s", ce->command, cur_value);
+		os_sprintf(buf, "{\"%s\":\"%s\"}", ce->command, cur_value);
 		util_free(cur_value);
 		INFO("Query Result: %s\r\n", buf );
 		MQTT_Publish(&mqttClient, statusTopic, buf, os_strlen(buf), 0, 0);
 	}
 	else{
 		util_free(ce->p.sp); // Free old value
-		ce->p.sp = util_strdup(new_value); // Copy new value to new string
+		ce->p.sp = new_value; // Save reference to new value
 		kvstore_put(configHandle, ce->command, ce->p.sp);
+		
 	}
 
 	util_free(buf);
@@ -291,9 +293,9 @@ LOCAL void ICACHE_FLASH_ATTR handleQstringCommand(char *new_value, command_eleme
  
 LOCAL void ICACHE_FLASH_ATTR updateRelayState(int s)
 {
-	char *state = s ? "on" : "off";
+	char *state = s ? "\"on\"}" : "\"off\"}";
 	char result[16];
-	os_strcpy(result,"relaystate:");
+	os_strcpy(result,"{\"relaystate\":");
 	os_strcat(result, state);
 	INFO("MQTT: New Relay State: %s\r\n", state);
 	MQTT_Publish(&mqttClient, statusTopic, result, os_strlen(result), 0, 0);
@@ -337,9 +339,9 @@ LOCAL void ICACHE_FLASH_ATTR updateButtonState(int s)
 {
 
 	
-	char *state = s ? "released" : "depressed";
+	char *state = s ? "\"released\"}" : "\"depressed\"}";
 	char result[25];
-	os_strcpy(result,"buttonstate:");
+	os_strcpy(result,"{\"buttonstate\":");
 	os_strcat(result, state);
 	INFO("MQTT: New Button State: %s\r\n", state);
 	MQTT_Publish(&mqttClient, statusTopic, result, os_strlen(result), 0, 0);
@@ -384,7 +386,7 @@ surveyCompleteCb(void *arg, STATUS status)
 		char *buf = util_zalloc(SURVEY_CHUNK_SIZE);
 		bss = bss->next.stqe_next; //ignore first
 		for(i = 2; (bss); i++){
-			os_sprintf(strlen(buf)+ buf, "ap:%s;chan:%d;rssi:%d\r\n", bss->ssid, bss->channel, bss->rssi);
+			os_sprintf(strlen(buf)+ buf, "{\"ap\":\"%s\";\"chan\":\"%d\";\"rssi\":\"%d\"}\r\n", bss->ssid, bss->channel, bss->rssi);
 			bss = bss->next.stqe_next;
 			buf = util_str_realloc(buf, i * SURVEY_CHUNK_SIZE); // Grow buffer
 		}
@@ -459,8 +461,12 @@ const char *data, uint32_t data_len)
 {
 	char *topicBuf, *dataBuf;
 	uint8_t i;
+	struct jsonparse_state state;
+	char command[32];
 
 	MQTT_Client* client = (MQTT_Client*)args; // Pointer to MQTT control block passed in as args
+	
+	command[0] = 0; // Zero command string length to prevent stack junk from printing during debug
 
 	// Save local copies of the topic and data
 	topicBuf = util_strndup(topic, topic_len);
@@ -470,20 +476,26 @@ const char *data, uint32_t data_len)
 	
 	// Control Message?
 	if(!os_strcmp(topicBuf, controlTopic)){
-		if(util_match_stringi(dataBuf, "muster", 6)){
+		jsonparse_setup(&state, dataBuf, data_len);
+		if (parse_json_param(&state, "control", command, sizeof(command)) != 2)
+			return; /* Command not present in json object */
+		if(!os_strcmp(command, "muster")){
 			publishConnInfo(&mqttClient);
 		}
 	}
 	
 	// Command Message?
 	else if (!os_strcmp(topicBuf, commandTopic)){ // Check for match to command topic
-		// Decode command
+		// Parse command
+		jsonparse_setup(&state, dataBuf, data_len);
+		if (parse_json_param(&state, "command", command, sizeof(command)) != 2)
+			return; /* Command not present in json object */
+				
 		for(i = 0; commandElements[i].command[0]; i++){
 			command_element *ce = &commandElements[i];
-			uint8_t cmdlen = os_strlen(ce->command);
 			//INFO("Trying %s\r\n", ce->command);
 			if(CP_NONE == ce->type){ // Parameterless command
-				if(util_match_stringi(dataBuf, ce->command, cmdlen)){
+				if(!os_strcmp(command, ce->command)){
 					switch(i){
 						case CMD_OFF:
 							relaySet(OFF);
@@ -518,7 +530,7 @@ const char *data, uint32_t data_len)
 			
 			if((CP_INT == ce->type) || (CP_BOOL == ce->type)){ // Integer/bool parameter
 				int arg;
-				if(util_parse_command_int(dataBuf, ce->command, &arg)){
+				if(util_parse_command_int(&state, command, ce->command, &arg)){
 					switch(i){
 						case CMD_PULSE: // Pulse rely on then off for a specific time in mSec
 							relaySet(ON);
@@ -547,7 +559,7 @@ const char *data, uint32_t data_len)
 			}
 			if(CP_QSTRING == ce->type){ // Query strings
 				char *val;
-				if(util_parse_command_qstring(dataBuf, ce->command,  &val)){
+				if(util_parse_command_qstring(&state, command, ce->command,  &val)){
 					if((CMD_SSID == i) || (CMD_WIFIPASS == i)){ // SSID or WIFIPASS?
 						handleQstringCommand(val, ce);
 					}

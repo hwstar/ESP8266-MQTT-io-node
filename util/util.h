@@ -18,10 +18,10 @@ char * util_string_split(const char *in_str, char **list, char sep, int max_list
 char * util_make_sub_topic(const char *rootTopic, char *subTopic);
 char * util_strdup(const char *s);
 char * util_strndup(const char *s, int len);
-bool util_match_stringi(const char *s1, const char *s2, unsigned len);
-bool util_parse_command_int(const char *str, const char *command,  int *val);
-bool util_parse_command_qstring(char *str, const char *command,  char **val);
-int util_atoi(const char *num);
+int parse_json_param(void *state, const char *paramname, char *paramvalue, int paramvaluesize);
+bool util_parse_command_int(void *state, const char *commandrcvd, const char *command,  int *val);
+bool util_parse_command_qstring(void *state, const char *commandrcvd, const char *command,  char **val);
+
 
 
 
