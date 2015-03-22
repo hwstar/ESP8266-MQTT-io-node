@@ -132,7 +132,7 @@ char * ICACHE_FLASH_ATTR util_make_sub_topic(const char *rootTopic, char *subTop
 }
 
 /*
- * Parse a json parameter
+ * Parse a json parameter from a parsed json string
  * Returns  0 if no name was found or matched.
  * Returns  1 if a name was matched, but no parameter was found
  * Returns 2 if a name was found and matched, and a parameter was found and matched.
@@ -149,9 +149,6 @@ int ICACHE_FLASH_ATTR parse_json_param(void *state, const char *paramname, char 
 			if(!jsonparse_strcmp_value((struct jsonparse_state *) state, paramname)){
 				i++;
 			}
-			else{
-				break;
-			}
 		}
 		if(i && (res == '"')){
 			i++;
@@ -162,26 +159,39 @@ int ICACHE_FLASH_ATTR parse_json_param(void *state, const char *paramname, char 
 	return i;
 }
 
+/*
+ * Local function to to support util_parse_command_int and util_parse_command_qstring
+ * Comares command and parses message looking for a parameter field. This can return -1 in addition to
+ * 0,1, and 2 from parse_json_param. -1 indicates the command did not match.
+ */
+ 
+LOCAL int ICACHE_FLASH_ATTR processCommandParam(const char *commandrcvd, const char *command, const char *message, char *param, int paramsize)
+{
+	struct jsonparse_state state;
+	
+	if(strcmp(command, commandrcvd)){
+		return -1;
+	}
+	param[0] = 0;	
+	jsonparse_setup(&state, message, os_strlen(message));	
+	return parse_json_param(&state, "param", param, paramsize);
+
+}
+
 
 /*
  * Parse a command with a single numeric parameter
+ * If the command is not matched, and  the number is not present, FALSE is returned.
  */
 
-bool ICACHE_FLASH_ATTR util_parse_command_int(void *state, const char *commandrcvd, const char *command,  int *val)
+bool ICACHE_FLASH_ATTR util_parse_command_int(const char *commandrcvd, const char *command, const char *message, int *val)
 {
 	int res;
 	char param[32];
+	struct jsonparse_state state;
 	
-	param[0] = 0;
+	res = processCommandParam(commandrcvd, command, message, param, sizeof(param));
 
-	if(strcmp(command, commandrcvd)){
-		return FALSE;
-	}
-
-	res = parse_json_param(state, "param", param, sizeof(param));
-	
-	
-		
 	if(2 == res){
 		*val = atoi(param);
 		return TRUE;
@@ -191,28 +201,30 @@ bool ICACHE_FLASH_ATTR util_parse_command_int(void *state, const char *commandrc
 
 /*
  * Parse a command with an optional string parameter
+ * Returns FALSE if the command is not matched.
  * Sets val to NULL if no parameter found, else returns an allocated string pointing to the
  * value. This string must be freed when no longer required.
  */
  
-bool ICACHE_FLASH_ATTR util_parse_command_qstring(void *state, const char *commandrcvd, const char *command,  char **val)
+bool ICACHE_FLASH_ATTR util_parse_command_qstring(const char *commandrcvd, const char *command, const char *message, char **val)
 {
 	int res;
 	char param[32];
+	struct jsonparse_state state;
 	
-	param[0] = 0;
+	res = processCommandParam(commandrcvd, command, message, param, sizeof(param));
 	
-	if(strcmp(command, commandrcvd))
+	if(-1 == res)
 		return FALSE;
-		
-	res = parse_json_param(state, "param", param, sizeof(param));
 	
-	if(2 == res)
+	if(2 == res){
 		*val = util_strdup(param);
-	else
+	}
+	else{
 		*val = NULL;
-
+	}
 	return TRUE;
+
 }
 
 

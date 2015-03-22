@@ -23,41 +23,51 @@ One control message is currently supported: *muster*. This directs the node to r
 
 **Command Messages**
 
+Command messages are sent using JSON encoding as follows:
+
+{"command":"command from table below"} For commands without a parameter
+
+{"command":"$COMMAND","param","$PARAM"} For commands with a parameter
+
+Because of limitations with the Espressif JSON parser library, all numbers should be sent as text fields 
+(i.e. quoted)
+
 MQTT commands supported:
 
 |Command| Description |
-|-------| ----------- |
-|ON 	| Turns relay on|
-|OFF	| Turns relay off|
-|PULSE:n| Pulses relay for N milliseconds|
-|TOGGLE	| Toggles relay state|
-|QUERY	| Returns relay state|
-|SURVEY	| Returns WIFI survey information as seen by the node|
-|BTLOCAL:n| 1 = link button to relay toggle, 0 = keep button separate|
-|SSID:n| Query or set SSID|
-|RESTART| Restart system|
-|WIFIPASS:n| Query or set WIFI Password|
-|CYCLE:n| Start or stop relay cycling (flashing)
+|--------| ----------- |
+|on 	 | Turns relay on|
+|off	 | Turns relay off|
+|pulse   | Pulses relay for $PARAM milliseconds|
+|toggle	 | Toggles relay state|
+|query	 | Returns relay state|
+|survey	 | Returns WIFI survey information as seen by the node|
+|btlocal | $PARAM: 1 = link button to relay toggle, 0 = keep button separate|
+|ssid    | Query or set SSID|
+|restart | Restart system|
+|wifipass| Query or set WIFI Password|
+|cycle   | Start or stop relay cycling where $PARAM is the half cycle time in milliseconds
 
 Notes:
-
-* Sending an SSID, or WIFIPASS command without a parameter will return the current value
-* SSID:n, WIFIPASS:n change not effective until next system restart
-* CYCLE:n Where n is the time of a half cycle in milliseconds
+* $ indicates a variable. e.g.: $COMMAND would be one of the commands in the table above.
+* Sending an ssid, or wifi command without "parameter":"$PARAM" will return the current value.
+* ssid, wifipass change not effective until next system restart
 
 **Status Messages**
 
+These are JSON encoded as follows:
+
 Status messages which can be published:
 
-* buttonstate:depressed
-* buttonstate:released
-* relaystate:on
-* relaystate:off
-* WIFI survey data in the following format: ap:$AP;chan:$CHAN;rssi:$RSSI. Can be multiple lines. One entry per line. 
+* {"buttonstate":"depressed"}
+* {"buttonstate":"released"}
+* {"relaystate":"on"}
+* {"relaystate":"off"}
+* WIFI survey data in the following format: {"access_points":["$AP":{"chan":"$CHAN","rssi":"$RSSI"}...]} 
 
 **Power on Message**
 
-After booting, the node posts a message to /node/info with the following data:
+After booting, the node posts a JSON encoded message to /node/info with the following data:
 
 |Field		| Description|
 |-----      | -----------|
@@ -72,15 +82,15 @@ The schema may be used to design a database of supported commands for each devic
 
 Here is an example:
 
-muster{connstate:online,device:/home/lab/relay,ip4:127.0.0.1,schema:hwstar_relaynode,ssid:yourssid}
+{"muster":{"connstate":"online","device":"/home/lab/relay","ip4":"$IP","schema":"hwstar_relaynode","ssid":"$SSID"}}
 
 **Last Will and Testament**
 
 The following will be published to /node/info if the node is not heard from by the MQTT broker:
 
-muster{connstate:offline,device:$DEVICE}
+{"muster"{"connstate":"offline","device":"hwstar_relaynode"}}
 
-Where $device is the configured device path.
+Where $device is the configured device path
 
 **Configuration Patcher**
 

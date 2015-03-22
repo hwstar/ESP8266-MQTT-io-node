@@ -19,8 +19,8 @@ char * util_make_sub_topic(const char *rootTopic, char *subTopic);
 char * util_strdup(const char *s);
 char * util_strndup(const char *s, int len);
 int parse_json_param(void *state, const char *paramname, char *paramvalue, int paramvaluesize);
-bool util_parse_command_int(void *state, const char *commandrcvd, const char *command,  int *val);
-bool util_parse_command_qstring(void *state, const char *commandrcvd, const char *command,  char **val);
+bool util_parse_command_int(const char *commandrcvd, const char *command,  const char *message, int *val);
+bool util_parse_command_qstring(const char *commandrcvd, const char *command,  const char *message, char **val);
 
 
 

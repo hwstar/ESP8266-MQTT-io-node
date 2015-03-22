@@ -379,17 +379,24 @@ surveyCompleteCb(void *arg, STATUS status)
 {
 	struct bss_info *bss = arg;
 	
-	#define SURVEY_CHUNK_SIZE 128
+	#define SURVEY_CHUNK_SIZE 256
 	
 	if(status == OK){
 		uint8_t i;
 		char *buf = util_zalloc(SURVEY_CHUNK_SIZE);
 		bss = bss->next.stqe_next; //ignore first
 		for(i = 2; (bss); i++){
-			os_sprintf(strlen(buf)+ buf, "{\"ap\":\"%s\";\"chan\":\"%d\";\"rssi\":\"%d\"}\r\n", bss->ssid, bss->channel, bss->rssi);
+			if(2 == i)
+				os_sprintf(strlen(buf) + buf,"{\"access_points\":[");
+			else
+				os_strcat(buf,",");
+			os_sprintf(strlen(buf)+ buf, "\"%s\":{\"chan\":\"%d\",\"rssi\":\"%d\"}", bss->ssid, bss->channel, bss->rssi);
 			bss = bss->next.stqe_next;
 			buf = util_str_realloc(buf, i * SURVEY_CHUNK_SIZE); // Grow buffer
 		}
+		if(buf[0])
+			os_strcat(buf,"]}");
+		
 		INFO("Survey Results:\r\n", buf);
 		INFO(buf);
 		MQTT_Publish(&mqttClient, statusTopic, buf, os_strlen(buf), 0, 0);
@@ -530,7 +537,7 @@ const char *data, uint32_t data_len)
 			
 			if((CP_INT == ce->type) || (CP_BOOL == ce->type)){ // Integer/bool parameter
 				int arg;
-				if(util_parse_command_int(&state, command, ce->command, &arg)){
+				if(util_parse_command_int(command, ce->command, dataBuf, &arg)){
 					switch(i){
 						case CMD_PULSE: // Pulse rely on then off for a specific time in mSec
 							relaySet(ON);
@@ -559,7 +566,7 @@ const char *data, uint32_t data_len)
 			}
 			if(CP_QSTRING == ce->type){ // Query strings
 				char *val;
-				if(util_parse_command_qstring(&state, command, ce->command,  &val)){
+				if(util_parse_command_qstring(command, ce->command, dataBuf, &val)){
 					if((CMD_SSID == i) || (CMD_WIFIPASS == i)){ // SSID or WIFIPASS?
 						handleQstringCommand(val, ce);
 					}
@@ -792,7 +799,7 @@ LOCAL void ICACHE_FLASH_ATTR sysInit(void)
 	
 	// Last will and testament
 
-	os_sprintf(buf, "muster{connstate:offline,device:%s}", configInfoBlock.e[MQTTDEVPATH].value);
+	os_sprintf(buf, "{\"muster\":{\"connstate\":\"offline\",\"device\":\"%s\"}}", configInfoBlock.e[MQTTDEVPATH].value);
 	MQTT_InitLWT(&mqttClient, infoTopic, buf, 0, 0);
 
 	// Subtopics
