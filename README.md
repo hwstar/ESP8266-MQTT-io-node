@@ -88,7 +88,7 @@ Here is an example:
 
 The following will be published to /node/info if the node is not heard from by the MQTT broker:
 
-{"muster"{"connstate":"offline","device":"hwstar_relaynode"}}
+{"muster":{"connstate":"offline","device":"/home/lab/relay"}}
 
 Where $device is the configured device path
 
