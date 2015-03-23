@@ -484,7 +484,7 @@ const char *data, uint32_t data_len)
 	// Control Message?
 	if(!os_strcmp(topicBuf, controlTopic)){
 		jsonparse_setup(&state, dataBuf, data_len);
-		if (parse_json_param(&state, "control", command, sizeof(command)) != 2)
+		if (util_parse_json_param(&state, "control", command, sizeof(command)) != 2)
 			return; /* Command not present in json object */
 		if(!os_strcmp(command, "muster")){
 			publishConnInfo(&mqttClient);
@@ -495,7 +495,7 @@ const char *data, uint32_t data_len)
 	else if (!os_strcmp(topicBuf, commandTopic)){ // Check for match to command topic
 		// Parse command
 		jsonparse_setup(&state, dataBuf, data_len);
-		if (parse_json_param(&state, "command", command, sizeof(command)) != 2)
+		if (util_parse_json_param(&state, "command", command, sizeof(command)) != 2)
 			return; /* Command not present in json object */
 				
 		for(i = 0; commandElements[i].command[0]; i++){
@@ -566,7 +566,7 @@ const char *data, uint32_t data_len)
 			}
 			if(CP_QSTRING == ce->type){ // Query strings
 				char *val;
-				if(util_parse_command_qstring(command, ce->command, dataBuf, &val)){
+				if(util_parse_command_qstring(command, ce->command, dataBuf, &val) != -1){
 					if((CMD_SSID == i) || (CMD_WIFIPASS == i)){ // SSID or WIFIPASS?
 						handleQstringCommand(val, ce);
 					}

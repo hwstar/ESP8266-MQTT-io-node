@@ -139,7 +139,7 @@ char * ICACHE_FLASH_ATTR util_make_sub_topic(const char *rootTopic, char *subTop
  * If 2 is returned, the parameter will be copied into the paramvalue string up to the paramvaluesize
  */
 
-int ICACHE_FLASH_ATTR parse_json_param(void *state, const char *paramname, char *paramvalue, int paramvaluesize)
+int ICACHE_FLASH_ATTR util_parse_json_param(void *state, const char *paramname, char *paramvalue, int paramvaluesize)
 {
 	int i = 0;
 	int res;
@@ -174,7 +174,7 @@ LOCAL int ICACHE_FLASH_ATTR processCommandParam(const char *commandrcvd, const c
 	}
 	param[0] = 0;	
 	jsonparse_setup(&state, message, os_strlen(message));	
-	return parse_json_param(&state, "param", param, paramsize);
+	return util_parse_json_param(&state, "param", param, paramsize);
 
 }
 
