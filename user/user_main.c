@@ -565,8 +565,8 @@ const char *data, uint32_t data_len)
 				}				
 			}
 			if(CP_QSTRING == ce->type){ // Query strings
-				char *val;
-				if(util_parse_command_qstring(command, ce->command, dataBuf, &val) != -1){
+				char *val = NULL;
+				if(util_parse_command_qstring(command, ce->command, dataBuf, &val) != FALSE){
 					if((CMD_SSID == i) || (CMD_WIFIPASS == i)){ // SSID or WIFIPASS?
 						handleQstringCommand(val, ce);
 					}
