@@ -1,6 +1,8 @@
 **esp_8266_MQTT_io_node**
 ==========
-This is an implementation of an MQTT Relay Node which runs natively on an ESP8266 ESP-03 module or other variant with enough free GPIO's.
+This is an implementation of an MQTT Relay Node which runs natively on an ESP8266 ESP-03 module or other variant with enough free GPIO's. 
+Additionally, a hardware design is now available using the ESP12 ESP8266 module. Please refer to my esp12-appliance-mod project. 
+
 Code is compiled using the toolchain referenced below.
 
 **Features:**
@@ -47,11 +49,12 @@ MQTT commands supported:
 |restart | Restart system|
 |wifipass| Query or set WIFI Password|
 |cycle   | Start or stop relay cycling where $PARAM is the half cycle time in milliseconds
+|mqttdevpath| Query or set MATT device path
 
 Notes:
 * $ indicates a variable. e.g.: $COMMAND would be one of the commands in the table above.
 * Sending an ssid, or wifi command without "parameter":"$PARAM" will return the current value.
-* ssid, wifipass change not effective until next system restart
+* ssid, wifipass, mqttdevpath change not effective until next system restart
 
 **Status Messages**
 
