@@ -61,7 +61,7 @@
 #define LATCHING 1		// Pulsed dual output (latching relay use)
 
 #ifndef MODE			// In initially udefined,
-#define MODE STANDARD	// Set  mode of operation
+#define MODE LATCHING	// Set  mode of operation
 						// either STANDARD OR LATCHING
 #endif
 
@@ -183,13 +183,13 @@ LOCAL config_info_block configInfoBlock = {
 	.e[MQTTPASS] = {.key = "MQTTPASS", .value="its_a_secret"},// MQTT Password
 	.e[MQTTKPALIV] = {.key = "MQTTKPALIV", .value="120"}, // Keepalive interval
 	.e[MQTTDEVPATH] = {.flags = CONFIG_FLD_REQD, .key = "MQTTDEVPATH", .value = "/home/lab/relay"}, // Device path
-	.e[MQTTBTLOCAL] = {.key = "MQTTBTLOCAL", .value = "1"} // Optional local toggle control using GPIO0
+	.e[MQTTBTLOCAL] = {.key = "MQTTBTLOCAL", .value = "1"}, // Optional local toggle control using GPIO0
 };
 
 // Command elements 
 // Additional commands are added here
  
-enum {CMD_OFF = 0, CMD_ON, CMD_TOGGLE, CMD_PULSE, CMD_BTLOCAL, CMD_QUERY, CMD_SURVEY, CMD_SSID, CMD_RESTART, CMD_WIFIPASS, CMD_CYCLE};
+enum {CMD_OFF = 0, CMD_ON, CMD_TOGGLE, CMD_PULSE, CMD_BTLOCAL, CMD_QUERY, CMD_SURVEY, CMD_SSID, CMD_RESTART, CMD_WIFIPASS, CMD_CYCLE, CMD_MQTTDEVPATH};
 
 LOCAL command_element commandElements[] = {
 	{.command = "off", .type = CP_NONE},
@@ -203,6 +203,7 @@ LOCAL command_element commandElements[] = {
 	{.command = "restart",.type = CP_NONE},
 	{.command = "wifipass",.type = CP_QSTRING},
 	{.command = "cycle",.type = CP_INT},
+	{.command = "mqttdevpath",.type = CP_QSTRING},
 	{.command = ""} /* End marker */
 };
 	
@@ -241,7 +242,7 @@ LOCAL void ICACHE_FLASH_ATTR publishConnInfo(MQTT_Client *client)
 	// Publish who we are and where we live
 	wifi_get_ip_info(STATION_IF, &ipConfig);
 	os_sprintf(buf, "{\"muster\":{\"connstate\":\"online\",\"device\":\"%s\",\"ip4\":\"%d.%d.%d.%d\",\"schema\":\"hwstar_relaynode\",\"ssid\":\"%s\"}}",
-			configInfoBlock.e[MQTTDEVPATH].value,
+			commandElements[CMD_MQTTDEVPATH].p.sp,
 			*((uint8_t *) &ipConfig.ip.addr),
 			*((uint8_t *) &ipConfig.ip.addr + 1),
 			*((uint8_t *) &ipConfig.ip.addr + 2),
@@ -567,7 +568,7 @@ const char *data, uint32_t data_len)
 			if(CP_QSTRING == ce->type){ // Query strings
 				char *val = NULL;
 				if(util_parse_command_qstring(command, ce->command, dataBuf, &val) != FALSE){
-					if((CMD_SSID == i) || (CMD_WIFIPASS == i)){ // SSID or WIFIPASS?
+					if((CMD_SSID == i) || (CMD_WIFIPASS == i) || (CMD_MQTTDEVPATH == i)){ // SSID, MQTTDEVPATH or WIFIPASS?
 						handleQstringCommand(val, ce);
 					}
 				}
@@ -759,12 +760,14 @@ LOCAL void ICACHE_FLASH_ATTR sysInit(void)
 	const char *ssidKey = commandElements[CMD_SSID].command;
 	const char *WIFIPassKey = commandElements[CMD_WIFIPASS].command;
 	const char *btLocalKey = commandElements[CMD_BTLOCAL].command;
+	const char *devicePathKey = commandElements[CMD_MQTTDEVPATH].command;
 
 	// Check for default configuration overrides
 	if(!kvstore_exists(configHandle, ssidKey)){ // if no ssid, assume the rest of the defaults need to be set as well
 		kvstore_put(configHandle, btLocalKey, configInfoBlock.e[MQTTBTLOCAL].value);
 		kvstore_put(configHandle, ssidKey, configInfoBlock.e[WIFISSID].value);
 		kvstore_put(configHandle, WIFIPassKey, configInfoBlock.e[WIFIPASS].value);
+		kvstore_put(configHandle, devicePathKey, configInfoBlock.e[MQTTDEVPATH].value);
 
 		// Write the KVS back out to flash	
 	
@@ -779,6 +782,7 @@ LOCAL void ICACHE_FLASH_ATTR sysInit(void)
 	
 	commandElements[CMD_WIFIPASS].p.sp = kvstore_get_string(configHandle, WIFIPassKey); // Retrieve WIFI Pass
 
+	commandElements[CMD_MQTTDEVPATH].p.sp = kvstore_get_string(configHandle, devicePathKey); // Retrieve MQTT Device Path
 	
 	// Initialize MQTT connection 
 	
@@ -803,8 +807,8 @@ LOCAL void ICACHE_FLASH_ATTR sysInit(void)
 	MQTT_InitLWT(&mqttClient, infoTopic, buf, 0, 0);
 
 	// Subtopics
-	commandTopic = util_make_sub_topic(configInfoBlock.e[MQTTDEVPATH].value, "command");
-	statusTopic = util_make_sub_topic(configInfoBlock.e[MQTTDEVPATH].value, "status");
+	commandTopic = util_make_sub_topic(commandElements[CMD_MQTTDEVPATH].p.sp, "command");
+	statusTopic = util_make_sub_topic(commandElements[CMD_MQTTDEVPATH].p.sp, "status");
 	INFO("Command subtopic: %s\r\n", commandTopic);
 	INFO("Status subtopic: %s\r\n", statusTopic);
 	
