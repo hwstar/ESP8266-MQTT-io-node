@@ -1,4 +1,4 @@
-**esp_8266_MQTT_io_node**
+**esp-8266-MQTT-io-node**
 ==========
 This is an implementation of an MQTT Relay Node which runs natively on an ESP8266 ESP-03 module or other variant with enough free GPIO's. 
 Additionally, a hardware design is now available using the ESP12 ESP8266 module. Please refer to my esp12-appliance-mod project. 
@@ -49,7 +49,7 @@ MQTT commands supported:
 |restart | Restart system|
 |wifipass| Query or set WIFI Password|
 |cycle   | Start or stop relay cycling where $PARAM is the half cycle time in milliseconds
-|mqttdevpath| Query or set MATT device path
+|mqttdevpath| Query or set MQTT device path
 
 Notes:
 * $ indicates a variable. e.g.: $COMMAND would be one of the commands in the table above.
@@ -70,7 +70,7 @@ Status messages which can be published:
 
 **Power on Message**
 
-After booting, the node posts a JSON encoded message to /node/info with the following data:
+After booting, the node posts a JSON encoded "muster" message to /node/info with the following data:
 
 |Field		| Description|
 |-----      | -----------|
@@ -104,10 +104,14 @@ https://github.com/hwstar/ESP8266-MQTT-config-patcher
 
 Post patching allows the configuration to be changed without having sensitive information in the source files.
 
+NB:Post-patching is optional. You can just edit the user_main.c source file and hardcode the configuration. 
+
 **Electrical Details**
 
 The code is configured to be used with an ESP module with 1 uncommitted I/O for standard mode and 2 GPIO's for bistable latching mode. GPIO12 is the default. It can be reconfigured, but use of GPIO2 is problematic as that pin needs to be
 high during boot, and that makes the electrical interface more complex.
+
+As mentioned above, a hardware design is available using the ESP12 module and a lastching relay. Please refer to my 
 
 The relay GPIO outputs are low true to be compatible with the bootloader's initial pin states. 
 (This prevents the relay from pulsing at power on).
@@ -118,9 +122,9 @@ Requires the ESP8266 toolchain be installed on the Linux system per the instruct
 
 https://github.com/pfalcon/esp-open-sdk
 
-toolchain should be installed in the /opt directory. Other directories will require Makefile modifications.
+Toolchain should be installed in the /opt directory. Other directories will require Makefile modifications.
 
-NB:Current Makefile supports Linux build hosts only at this time.
+NB:Current Makefile supports Linux build hosts only at this time. If someone wants to submit a working Makefile for Windows, I'd be happy to add it to the repository.
 
 **LICENSE - "MIT License"**
 
