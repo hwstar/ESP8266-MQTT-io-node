@@ -111,7 +111,7 @@ NB:Post-patching is optional. You can just edit the user_main.c source file and 
 The code is configured to be used with an ESP module with 1 uncommitted I/O for standard mode and 2 GPIO's for bistable latching mode. GPIO12 is the default. It can be reconfigured, but use of GPIO2 is problematic as that pin needs to be
 high during boot, and that makes the electrical interface more complex.
 
-As mentioned above, a hardware design is available using the ESP12 module and a lastching relay. Please refer to my 
+As mentioned above, a hardware design is available using the ESP12 module and a lastching relay. 
 
 The relay GPIO outputs are low true to be compatible with the bootloader's initial pin states. 
 (This prevents the relay from pulsing at power on).
