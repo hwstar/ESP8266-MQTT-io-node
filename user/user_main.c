@@ -486,7 +486,7 @@ const char *data, uint32_t data_len)
 	if(!os_strcmp(topicBuf, controlTopic)){
 		jsonparse_setup(&state, dataBuf, data_len);
 		if (util_parse_json_param(&state, "control", command, sizeof(command)) != 2)
-			return; /* Command not present in json object */
+			goto cleanup; /* Command not present in json object */
 		if(!os_strcmp(command, "muster")){
 			publishConnInfo(&mqttClient);
 		}
@@ -497,7 +497,7 @@ const char *data, uint32_t data_len)
 		// Parse command
 		jsonparse_setup(&state, dataBuf, data_len);
 		if (util_parse_json_param(&state, "command", command, sizeof(command)) != 2)
-			return; /* Command not present in json object */
+			goto cleanup; /* Command not present in json object */
 				
 		for(i = 0; commandElements[i].command[0]; i++){
 			command_element *ce = &commandElements[i];
@@ -579,6 +579,7 @@ const char *data, uint32_t data_len)
 	} /* END if topic test */
 				
 	// Free local copies of the topic and data strings
+cleanup:
 	util_free(topicBuf);
 	util_free(dataBuf);
 }
