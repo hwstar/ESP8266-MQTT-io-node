@@ -221,6 +221,7 @@ typedef enum {LC_OFF = 0, LC_ON, LC_FLASH, LC_FLASH_OFF} lcstatetype;
 LOCAL lcstatetype lcState;
 #endif
 
+LOCAL char *schema = "hwstar_relaynode";
 LOCAL int buttonState = 1;
 LOCAL char *commandTopic, *statusTopic;
 LOCAL char *controlTopic = "/node/control";
@@ -241,12 +242,13 @@ LOCAL void ICACHE_FLASH_ATTR publishConnInfo(MQTT_Client *client)
 		
 	// Publish who we are and where we live
 	wifi_get_ip_info(STATION_IF, &ipConfig);
-	os_sprintf(buf, "{\"muster\":{\"connstate\":\"online\",\"device\":\"%s\",\"ip4\":\"%d.%d.%d.%d\",\"schema\":\"hwstar_relaynode\",\"ssid\":\"%s\"}}",
-			commandElements[CMD_MQTTDEVPATH].p.sp,
+		os_sprintf(buf, "{\"muster\":{\"connstate\":\"online\",\"device\":\"%s\",\"ip4\":\"%d.%d.%d.%d\",\"schema\":\"%s\",\"ssid\":\"%s\"}}",
+			configInfoBlock.e[MQTTDEVPATH].value,
 			*((uint8_t *) &ipConfig.ip.addr),
 			*((uint8_t *) &ipConfig.ip.addr + 1),
 			*((uint8_t *) &ipConfig.ip.addr + 2),
 			*((uint8_t *) &ipConfig.ip.addr + 3),
+			schema,
 			commandElements[CMD_SSID].p.sp);
 
 	INFO("MQTT Node info: %s\r\n", buf);
